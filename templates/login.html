@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MIKEN | Login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+
+<div class="auth">
+  <div class="auth-card">
+
+    <div class="auth-top">
+      <img src="{{ url_for('static', filename='img/miken_logo.png') }}" alt="MIKEN">
+      <div>
+        <div style="font-weight:900;font-size:18px;">Sistema Portal de Inventario</div>
+        <div style="opacity:.95;font-weight:700;">Acceso interno</div>
+      </div>
+    </div>
+
+    <div class="auth-body">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-wrap">
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <form class="form" method="POST" action="{{ url_for('login') }}">
+        <label>Usuario</label>
+        <input type="text" name="username" required>
+
+        <label>Contraseña</label>
+        <input type="password" name="password" required>
+
+        <div class="row gap-12" style="margin-top:10px;">
+          <button class="btn" type="submit">Ingresar</button>
+        </div>
+
+        <small style="display:block;margin-top:10px;">
+          Si olvidó su contraseña, contacte a administración.
+        </small>
+      </form>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  setTimeout(() => {
+    document.querySelectorAll(".flash").forEach(el => el.style.display="none");
+  }, 2000);
+</script>
+
+</body>
+</html>
+
+

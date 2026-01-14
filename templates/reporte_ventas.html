@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<h1 class="h1">Análisis de ventas (base)</h1>
+<p class="muted">Por ahora se calcula con egresos (hasta que el módulo ventas sea formal).</p>
+
+<div class="card" style="margin-top:14px;">
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <a class="btn {% if periodo=='mes' %}btn-primary{% endif %}" href="/reportes/ventas?periodo=mes">Por mes</a>
+    <a class="btn {% if periodo=='semana' %}btn-primary{% endif %}" href="/reportes/ventas?periodo=semana">Por semana</a>
+  </div>
+</div>
+
+<div class="grid grid-2" style="margin-top:14px;">
+  <div class="card">
+    <h3 style="margin:0 0 10px 0;">Serie ({{ periodo }})</h3>
+    <table class="table">
+      <tr><th>Periodo</th><th>Total</th></tr>
+      {% for s in series %}
+        <tr><td>{{ s.bucket }}</td><td>{{ s.total }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px 0;">Top productos (salidas)</h3>
+    <table class="table">
+      <tr><th>Producto</th><th>Tipo</th><th>Total</th></tr>
+      {% for t in top %}
+        <tr><td><b>{{ t.nombre }}</b></td><td>{{ t.tipo }}</td><td>{{ t.total }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<h1 class="h1">Reporte de Inventario</h1>
+<p class="muted">Vista rápida para análisis.</p>
+
+<div class="card" style="margin-top:14px; padding:0;">
+  <table class="table">
+    <tr>
+      <th>Tipo</th><th>SKU</th><th>Nombre</th><th>Stock</th><th>Mín</th>
+    </tr>
+    {% for p in productos %}
+      <tr>
+        <td>{{ p.tipo }}</td>
+        <td>{{ p.sku or "" }}</td>
+        <td><b>{{ p.nombre }}</b></td>
+        <td>{{ p.stock_actual }}</td>
+        <td>{{ p.stock_min }}</td>
+      </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% endblock %}

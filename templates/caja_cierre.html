@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="card">
+  <h2 style="margin:0 0 6px 0;">✅ Cierre de caja</h2>
+  <p style="margin:0 0 14px; color:var(--muted); font-weight:650;">Día: <b>{{ dia }}</b></p>
+
+  <div class="grid">
+    <div class="card" style="border-radius:16px;">
+      <div style="color:var(--muted); font-weight:800;">Efectivo inicial</div>
+      <div style="font-size:22px; font-weight:900;">${{ '%.2f'|format(efectivo_inicial) }}</div>
+    </div>
+    <div class="card" style="border-radius:16px;">
+      <div style="color:var(--muted); font-weight:800;">Efectivo final (calculado)</div>
+      <div style="font-size:22px; font-weight:900;">${{ '%.2f'|format(efectivo_final) }}</div>
+    </div>
+    <div class="card" style="border-radius:16px;">
+      <div style="color:var(--muted); font-weight:800;">Ingresos</div>
+      <div style="font-size:22px; font-weight:900;">${{ '%.2f'|format(efectivo_ing) }}</div>
+    </div>
+    <div class="card" style="border-radius:16px;">
+      <div style="color:var(--muted); font-weight:800;">Egresos</div>
+      <div style="font-size:22px; font-weight:900;">${{ '%.2f'|format(efectivo_egr) }}</div>
+    </div>
+  </div>
+
+  <form method="post" style="margin-top:14px;">
+    <label style="font-weight:800;">Nota (opcional)</label>
+    <input name="nota" type="text"
+           style="width:100%; margin-top:6px; padding:10px; border-radius:12px; border:1px solid var(--border);">
+
+    <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn--primary" type="submit">Confirmar cierre</button>
+      <a class="btn" href="{{ url_for('caja_home') }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+

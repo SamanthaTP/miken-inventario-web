@@ -1,0 +1,79 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="card" style="max-width:900px; margin:0 auto;">
+  <h2>
+    {% if modo == "nuevo" %}
+      ➕ Nuevo producto ({{ "Máquinas" if tipo=="maquina" else "Insumos" }})
+    {% else %}
+      ✏️ Editar producto ({{ "Máquinas" if tipo=="maquina" else "Insumos" }})
+    {% endif %}
+  </h2>
+  <p class="muted" style="margin-top:0;">Complete los datos del producto.</p>
+
+  <form method="post" enctype="multipart/form-data">
+    <div class="row">
+      <div>
+        <label>SKU / Modelo</label>
+        <input name="sku" value="{{ producto['sku'] if producto else '' }}" placeholder="Ej: MK-618DB">
+      </div>
+      <div>
+        <label>Nombre *</label>
+        <input name="nombre" required value="{{ producto['nombre'] if producto else '' }}" placeholder="Ej: Máquina Helado Soft 2 Tolvas">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Categoría</label>
+        <input name="categoria" value="{{ producto['categoria'] if producto else '' }}" placeholder="Ej: Helado soft">
+      </div>
+      <div>
+        <label>Unidad</label>
+        <input name="unidad" value="{{ producto['unidad'] if producto else '' }}" placeholder="Ej: unidad / caja / paquete">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Precio</label>
+        <input name="precio" value="{{ producto['precio'] if producto else '0' }}" placeholder="0">
+      </div>
+      <div>
+        <label>Stock actual</label>
+        <input name="stock_actual" value="{{ producto['stock_actual'] if producto else '0' }}" placeholder="0">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Stock mínimo</label>
+        <input name="stock_min" value="{{ producto['stock_min'] if producto else '0' }}" placeholder="0">
+      </div>
+
+      <div>
+        <label>Imagen (png/jpg/jpeg/webp)</label>
+        <input type="file" name="imagen" accept=".png,.jpg,.jpeg,.webp">
+        {% if producto and producto["imagen_filename"] %}
+          <p class="muted" style="margin:6px 0 0 0;">Actual: {{ producto["imagen_filename"] }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if modo == "editar" %}
+    <label>Activo</label>
+    <select name="activo">
+      <option value="1" {% if producto and producto["activo"]==1 %}selected{% endif %}>Sí</option>
+      <option value="0" {% if producto and producto["activo"]==0 %}selected{% endif %}>No</option>
+    </select>
+    {% endif %}
+
+    <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Guardar</button>
+      <a class="btn" href="{{ url_for('catalogo_maquinas' if tipo=='maquina' else 'catalogo_insumos') }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+

@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="card">
+  <h2>📊 Dashboard</h2>
+  <p class="muted" style="margin-top:0;">Resumen rápido del inventario y movimientos.</p>
+
+  <div class="row" style="margin-top:14px;">
+    <div class="card" style="padding:14px;">
+      <h3 style="margin:0 0 6px 0;">🧊 Máquinas</h3>
+      <div style="font-size:28px; font-weight:900;">{{ maquinas_total }}</div>
+      <a class="btn" href="{{ url_for('catalogo_maquinas') }}" style="margin-top:10px;">Ver catálogo</a>
+    </div>
+
+    <div class="card" style="padding:14px;">
+      <h3 style="margin:0 0 6px 0;">📦 Insumos</h3>
+      <div style="font-size:28px; font-weight:900;">{{ insumos_total }}</div>
+      <a class="btn" href="{{ url_for('catalogo_insumos') }}" style="margin-top:10px;">Ver catálogo</a>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:12px;">
+    <div class="card" style="padding:14px;">
+      <h3 style="margin:0 0 6px 0;">✅ Activos</h3>
+      <div style="font-size:28px; font-weight:900;">{{ activos_total }}</div>
+      <span class="muted">Productos activos en sistema</span>
+    </div>
+
+    <div class="card" style="padding:14px;">
+      <h3 style="margin:0 0 6px 0;">⚠ Stock bajo</h3>
+      <div style="font-size:28px; font-weight:900;">{{ stock_bajo_total }}</div>
+      <a class="btn" href="{{ url_for('stock_bajo') }}" style="margin-top:10px;">Ver alerta</a>
+    </div>
+  </div>
+
+  <!-- Inventario (YA NO ES PRÓXIMAMENTE) -->
+  <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+    <a class="btn primary" href="{{ url_for('caja_mov_nuevo') }}">➕ Registrar movimiento</a>
+    <a class="btn" href="{{ url_for('caja_movimientos_list') }}">📜 Historial de movimientos</a>
+  </div>
+
+</div>
+
+{% endblock %}
+

@@ -1,0 +1,110 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">📋 Movimientos</h1>
+      <p class="page-subtitle">Historial de movimientos registrados.</p>
+    </div>
+
+    <div class="page-actions">
+      <!-- ✅ FIX: antes decía url_for('movimiento_nuevo') -->
+      <a class="btn btn-primary" href="{{ url_for('caja_mov_nuevo') }}">➕ Nuevo movimiento</a>
+      <a class="btn" href="{{ url_for('dashboard') }}">🏠 Volver al dashboard</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <form class="filters" method="get">
+      <div class="filters-row">
+        <div class="field">
+          <label>Desde</label>
+          <input type="date" name="desde" value="{{ request.args.get('desde','') }}">
+        </div>
+
+        <div class="field">
+          <label>Hasta</label>
+          <input type="date" name="hasta" value="{{ request.args.get('hasta','') }}">
+        </div>
+
+        <div class="field">
+          <label>Método</label>
+          <select name="metodo">
+            {% set m = request.args.get('metodo','') %}
+            <option value="" {{ 'selected' if m=='' else '' }}>Todos</option>
+            <option value="efectivo" {{ 'selected' if m=='efectivo' else '' }}>Efectivo</option>
+            <option value="banco" {{ 'selected' if m=='banco' else '' }}>Banco</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Tipo</label>
+          {% set t = request.args.get('tipo_mov','') %}
+          <select name="tipo_mov">
+            <option value="" {{ 'selected' if t=='' else '' }}>Todos</option>
+            <option value="ingreso" {{ 'selected' if t=='ingreso' else '' }}>Ingreso</option>
+            <option value="egreso" {{ 'selected' if t=='egreso' else '' }}>Egreso</option>
+          </select>
+        </div>
+
+        <div class="field field-grow">
+          <label>Buscar</label>
+          <input type="text" name="q" placeholder="Motivo / referencia / comprobante"
+                 value="{{ request.args.get('q','') }}">
+        </div>
+
+        <div class="field field-btn">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" type="submit">Filtrar</button>
+        </div>
+
+        <div class="field field-btn">
+          <label>&nbsp;</label>
+          <a class="btn btn-ghost" href="{{ url_for(request.endpoint) }}">Limpiar</a>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Día</th>
+            <th>Método</th>
+            <th>Tipo</th>
+            <th>Monto</th>
+            <th>Motivo</th>
+            <th>Referencia</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if movimientos and movimientos|length > 0 %}
+            {% for r in movimientos %}
+              <tr>
+                <td>{{ r["fecha"] }}</td>
+                <td>{{ r["dia"] if "dia" in r.keys() else "" }}</td>
+                <td>{{ r["metodo"] if "metodo" in r.keys() else (r["medio"] if "medio" in r.keys() else "") }}</td>
+                <td>{{ r["tipo_mov"] if "tipo_mov" in r.keys() else (r["tipo"] if "tipo" in r.keys() else "") }}</td>
+                <td>${{ "%.2f"|format(r["monto"]) }}</td>
+                <td>{{ r["motivo"] }}</td>
+                <td>{{ r["referencia"] if "referencia" in r.keys() else "" }}</td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="7" class="muted">No hay movimientos para mostrar.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+

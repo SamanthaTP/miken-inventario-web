@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<h1 class="h1">📊 Reportes</h1>
+<p class="muted">Base inicial (se irá robusteciendo).</p>
+
+<div class="grid grid-3" style="margin-top:14px;">
+  <div class="card">
+    <h3 style="margin:0 0 10px 0;">Inventario</h3>
+    <a class="btn" href="/reportes/inventario">Ver reporte</a>
+    <a class="btn" href="/export/inventario.xlsx" style="margin-top:10px;">Excel</a>
+    <a class="btn" href="/export/inventario.pdf" style="margin-top:10px;">PDF</a>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px 0;">Movimientos</h3>
+    <a class="btn" href="/inventario/movimientos">Ver historial</a>
+    <a class="btn" href="/export/movimientos.xlsx" style="margin-top:10px;">Excel</a>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px 0;">Ventas (base)</h3>
+    <a class="btn" href="/reportes/ventas">Ver reporte</a>
+  </div>
+</div>
+
+{% endblock %}

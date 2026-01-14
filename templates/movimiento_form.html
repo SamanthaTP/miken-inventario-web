@@ -1,0 +1,50 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="card" style="max-width:900px; margin:0 auto;">
+  <h2>➕ Registrar movimiento</h2>
+  <p class="muted" style="margin-top:0;">Ingrese el producto y el tipo de movimiento.</p>
+
+  <form method="post">
+    <div class="row">
+      <div>
+        <label>Producto</label>
+        <select name="producto_id" required>
+          <option value="">Seleccione...</option>
+          {% for p in productos %}
+            <option value="{{ p['id'] }}">
+              {{ p['nombre'] }} ({{ p['tipo'] }}) · Stock: {{ p['stock_actual'] }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label>Tipo</label>
+        <select name="tipo_mov" required>
+          <option value="ingreso">Ingreso</option>
+          <option value="egreso">Egreso</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Cantidad</label>
+        <input name="cantidad" type="number" min="1" required>
+      </div>
+      <div>
+        <label>Motivo (opcional)</label>
+        <input name="motivo" placeholder="Ej: Compra / Venta / Ajuste / Daño">
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Guardar</button>
+      <a class="btn" href="{{ url_for('dashboard') }}">Volver</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+

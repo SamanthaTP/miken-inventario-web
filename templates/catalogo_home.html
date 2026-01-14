@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="card">
+  <h2>📦 Catálogo</h2>
+  <p class="muted" style="margin-top:0;">Seleccione el catálogo que desea gestionar.</p>
+
+  <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+    <a class="btn primary" href="{{ url_for('catalogo_maquinas') }}">🧊 Catálogo de Máquinas</a>
+    <a class="btn primary" href="{{ url_for('catalogo_insumos') }}">📦 Catálogo de Insumos</a>
+  </div>
+</div>
+
+{% endblock %}
+

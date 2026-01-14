@@ -1,0 +1,122 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="card">
+  <h2 style="margin:0 0 6px 0;">💰 Caja chica</h2>
+  <p style="margin:0; color:var(--muted); font-weight:650;">
+    Día: <b>{{ dia }}</b> • Estado:
+    {% if estado and estado.abierta == 1 %}
+      <b style="color:#0f5132;">ABIERTA</b>
+    {% else %}
+      <b style="color:#8a2f2f;">CERRADA</b>
+    {% endif %}
+  </p>
+
+  <div style="margin-top:14px; display:flex; flex-wrap:wrap; gap:10px;">
+    {% if estado and estado.abierta == 1 %}
+      <a class="btn btn--primary" href="{{ url_for('caja_mov_nuevo') }}">➕ Registrar movimiento</a>
+      <a class="btn" href="{{ url_for('caja_movimientos_list') }}">📄 Ver historial</a>
+      <a class="btn btn--danger" href="{{ url_for('caja_cerrar') }}">✅ Cerrar caja</a>
+    {% else %}
+      <a class="btn btn--primary" href="{{ url_for('caja_abrir') }}">🔓 Abrir caja</a>
+      <a class="btn" href="{{ url_for('caja_movimientos_list') }}">📄 Ver historial</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid" style="margin-top:14px;">
+  <div class="card">
+    <h3 style="margin:0 0 10px;">Efectivo</h3>
+    <p style="margin:0 0 6px; color:var(--muted); font-weight:650;">Inicio del día (efectivo):</p>
+    <div style="font-size:28px; font-weight:900;">${{ '%.2f'|format(efectivo_inicial) }}</div>
+
+    <div style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap;">
+      <div>
+        <div style="color:var(--muted); font-weight:700;">Ingresos</div>
+        <div style="font-size:18px; font-weight:900;">${{ '%.2f'|format(efectivo_ing) }}</div>
+      </div>
+      <div>
+        <div style="color:var(--muted); font-weight:700;">Egresos</div>
+        <div style="font-size:18px; font-weight:900;">${{ '%.2f'|format(efectivo_egr) }}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
+      <div style="color:var(--muted); font-weight:700;">Saldo efectivo calculado</div>
+      <div style="font-size:22px; font-weight:900;">${{ '%.2f'|format(saldo_efectivo) }}</div>
+      <small style="color:var(--muted); font-weight:650;">Saldo = inicio + ingresos - egresos</small>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px;">Banco (registro)</h3>
+    <p style="margin:0; color:var(--muted); font-weight:650;">
+      Aquí solo registras pagos/depósitos por comprobante. No calcula saldo real bancario.
+    </p>
+
+    <div style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap;">
+      <div>
+        <div style="color:var(--muted); font-weight:700;">Ingresos</div>
+        <div style="font-size:18px; font-weight:900;">${{ '%.2f'|format(banco_ing) }}</div>
+      </div>
+      <div>
+        <div style="color:var(--muted); font-weight:700;">Egresos</div>
+        <div style="font-size:18px; font-weight:900;">${{ '%.2f'|format(banco_egr) }}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <a class="btn btn--primary" href="{{ url_for('caja_mov_nuevo') }}">➕ Registrar banco/efectivo</a>
+      <a class="btn" href="{{ url_for('caja_movimientos_list') }}">📄 Ver historial</a>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h3 style="margin:0 0 10px;">Últimos movimientos (máx 50)</h3>
+  <p style="margin:0 0 12px; color:var(--muted); font-weight:650;">
+    Mostrando desde <b>{{ start }}</b> hasta <b>{{ end }}</b>
+  </p>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Día</th>
+        <th>Tipo</th>
+        <th>Método</th>
+        <th>Monto</th>
+        <th>Motivo</th>
+        <th>Comprobante</th>
+        <th>Matriz</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if ultimos %}
+        {% for r in ultimos %}
+          <tr>
+            <td>{{ r.fecha }}</td>
+            <td>{{ r.dia }}</td>
+            <td>{{ r.tipo_mov }}</td>
+            <td>{{ r.metodo }}</td>
+            <td><b>${{ '%.2f'|format(r.monto) }}</b></td>
+            <td>{{ r.motivo or '-' }}</td>
+            <td>{{ r.referencia or '-' }}</td>
+            <td>
+              {% if r.enviado_matriz == 1 %}
+                ✅
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="8" style="color:var(--muted); font-weight:650;">No hay movimientos.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
+

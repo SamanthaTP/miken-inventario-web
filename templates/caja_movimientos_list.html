@@ -1,0 +1,79 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="card">
+  <h2 style="margin:0 0 6px 0;">📄 Historial de movimientos</h2>
+
+  <div style="margin:10px 0 14px; color:var(--muted); font-weight:800;">
+    Ingresos: <b>${{ '%.2f'|format(total_ing) }}</b> /
+    Egresos: <b>${{ '%.2f'|format(total_egr) }}</b>
+  </div>
+
+  <form method="get" style="display:flex; flex-wrap:wrap; gap:10px; align-items:end;">
+    <div>
+      <label style="font-weight:800;">Desde</label><br>
+      <input name="start" value="{{ start }}" style="padding:10px; border-radius:12px; border:1px solid var(--border);">
+    </div>
+    <div>
+      <label style="font-weight:800;">Hasta</label><br>
+      <input name="end" value="{{ end }}" style="padding:10px; border-radius:12px; border:1px solid var(--border);">
+    </div>
+    <div>
+      <label style="font-weight:800;">Método</label><br>
+      <select name="metodo" style="padding:10px; border-radius:12px; border:1px solid var(--border);">
+        <option value="todos" {% if metodo=='todos' %}selected{% endif %}>Todos</option>
+        <option value="efectivo" {% if metodo=='efectivo' %}selected{% endif %}>Efectivo</option>
+        <option value="banco" {% if metodo=='banco' %}selected{% endif %}>Banco</option>
+      </select>
+    </div>
+    <button class="btn btn--primary" type="submit">Filtrar</button>
+    <a class="btn" href="{{ url_for('caja_home') }}">Volver</a>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Día</th>
+        <th>Tipo</th>
+        <th>Método</th>
+        <th>Monto</th>
+        <th>Motivo</th>
+        <th>Comprobante</th>
+        <th>Matriz</th>
+        <th>Acción</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if rows %}
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.fecha }}</td>
+          <td>{{ r.dia }}</td>
+          <td>{{ r.tipo_mov }}</td>
+          <td>{{ r.metodo }}</td>
+          <td><b>${{ '%.2f'|format(r.monto) }}</b></td>
+          <td>{{ r.motivo or '-' }}</td>
+          <td>{{ r.referencia or '-' }}</td>
+          <td>{% if r.enviado_matriz==1 %}✅{% else %}-{% endif %}</td>
+          <td>
+            {% if r.enviado_matriz==0 and r.metodo=='efectivo' and r.tipo_mov=='egreso' %}
+              <form method="post" action="{{ url_for('caja_marcar_enviado_matriz', mid=r.id) }}">
+                <button class="btn" type="submit">Marcar enviado</button>
+              </form>
+            {% else %}
+              -
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="9" style="color:var(--muted); font-weight:650;">No hay registros.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

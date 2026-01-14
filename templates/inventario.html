@@ -1,0 +1,74 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<h1 class="h1">📦 Inventario</h1>
+<p class="muted">{% if solo_stock_bajo %}Mostrando solo stock bajo{% else %}Listado paginado{% endif %} — Total: {{ total }}</p>
+
+<div class="card" style="margin-top:14px;">
+  <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:space-between; align-items:center;">
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <a class="btn btn-primary" href="/inventario/movimiento/nuevo">+ Registrar movimiento</a>
+      <a class="btn" href="/inventario/movimientos">Historial</a>
+      <a class="btn" href="/export/inventario.xlsx">Export Excel</a>
+      <a class="btn" href="/export/inventario.pdf">Export PDF</a>
+    </div>
+
+    <form method="GET" style="display:flex; gap:10px; flex-wrap:wrap;">
+      <input name="q" value="{{ q }}" placeholder="Buscar por SKU, nombre o categoría"
+             style="padding:10px; border:1px solid var(--border); border-radius:10px; min-width:260px;">
+      <input type="hidden" name="page" value="1">
+      <button class="btn" type="submit">Buscar</button>
+      <a class="btn" href="/inventario">Limpiar</a>
+    </form>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px; padding:0;">
+  <table class="table">
+    <tr>
+      <th>Tipo</th>
+      <th>SKU</th>
+      <th>Nombre</th>
+      <th>Stock</th>
+      <th>Mín</th>
+      <th>Estado</th>
+    </tr>
+
+    {% for p in productos %}
+    <tr>
+      <td>{{ "Máquina" if p.tipo=="maquina" else "Insumo" }}</td>
+      <td>{{ p.sku or "" }}</td>
+      <td><b>{{ p.nombre }}</b></td>
+      <td>{{ p.stock_actual }}</td>
+      <td>{{ p.stock_min }}</td>
+      <td>
+        {% if p.activo==0 %}
+          <span class="badge">Inactivo</span>
+        {% elif p.stock_actual <= p.stock_min %}
+          <span class="badge badge-warn">Stock bajo</span>
+        {% else %}
+          <span class="badge">OK</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  {% if productos|length == 0 %}
+    <div style="padding:12px;" class="muted">No hay productos para mostrar.</div>
+  {% endif %}
+</div>
+
+{% if not solo_stock_bajo %}
+<div class="pager">
+  <span class="badge">Página {{ page }} / {{ pages }}</span>
+  {% if page > 1 %}
+    <a class="btn" href="?q={{ q }}&page={{ page-1 }}&per_page={{ per_page }}">← Anterior</a>
+  {% endif %}
+  {% if page < pages %}
+    <a class="btn" href="?q={{ q }}&page={{ page+1 }}&per_page={{ per_page }}">Siguiente →</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
