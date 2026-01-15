@@ -32,6 +32,8 @@ def allowed_file(filename: str) -> bool:
 def db_conn():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
+    # habilitar FK por conexión (útil si tienes foreign keys)
+    conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
 
@@ -113,7 +115,7 @@ def logout():
 
 
 # --------------------
-# DASHBOARD
+# DASHBOARD (Sprint 4)
 # --------------------
 @app.route("/dashboard")
 @login_required
@@ -121,38 +123,119 @@ def dashboard():
     conn = db_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT COUNT(*) AS c FROM productos WHERE tipo='maquina'")
-    maquinas_total = cur.fetchone()["c"]
-
-    cur.execute("SELECT COUNT(*) AS c FROM productos WHERE tipo='insumo'")
-    insumos_total = cur.fetchone()["c"]
-
+    # KPIs de productos (ACTIVOS)
     cur.execute("SELECT COUNT(*) AS c FROM productos WHERE activo=1")
-    activos_total = cur.fetchone()["c"]
+    total_productos = cur.fetchone()["c"]
 
     cur.execute("""
         SELECT COUNT(*) AS c
         FROM productos
         WHERE activo=1 AND stock_actual <= stock_min
     """)
-    stock_bajo_total = cur.fetchone()["c"]
+    bajo_stock = cur.fetchone()["c"]
+
+    # Estado Operativo (proxy: activo=1 operativa, activo=0 en revisión) para tipo='maquina'
+    cur.execute("SELECT COUNT(*) AS c FROM productos WHERE tipo='maquina'")
+    maquinas_total = cur.fetchone()["c"]
+
+    cur.execute("SELECT COUNT(*) AS c FROM productos WHERE tipo='maquina' AND activo=1")
+    maquinas_operativas = cur.fetchone()["c"]
+
+    cur.execute("SELECT COUNT(*) AS c FROM productos WHERE tipo='maquina' AND activo=0")
+    maquinas_revision = cur.fetchone()["c"]
 
     # Caja: estado hoy
     dia = today_str()
     cur.execute("SELECT * FROM caja_estado WHERE dia=?", (dia,))
-    caja_estado = cur.fetchone()
-    caja_abierta = 1 if (caja_estado and caja_estado["abierta"] == 1) else 0
+    estado = cur.fetchone()
+    caja_abierta = 1 if (estado and int(estado["abierta"]) == 1) else 0
+    efectivo_inicial = float(estado["efectivo_inicial"]) if estado else 0.0
+
+    # Caja chica hoy: efectivo_inicial + ingresos_efectivo - egresos_efectivo
+    cur.execute("""
+        SELECT
+          COALESCE(SUM(CASE WHEN tipo_mov='ingreso' THEN monto ELSE 0 END),0) AS ing,
+          COALESCE(SUM(CASE WHEN tipo_mov='egreso' THEN monto ELSE 0 END),0) AS egr
+        FROM caja_movimientos
+        WHERE dia=? AND metodo='efectivo'
+    """, (dia,))
+    r = cur.fetchone()
+    ingresos_hoy = float(r["ing"]) if r else 0.0
+    egresos_hoy = float(r["egr"]) if r else 0.0
+    caja_chica = efectivo_inicial + ingresos_hoy - egresos_hoy
+
+    # Último reporte: última fecha remembered de caja_movimientos o NOW
+    cur.execute("SELECT MAX(fecha) AS last FROM caja_movimientos")
+    last = cur.fetchone()["last"]
+    ultimo_reporte = last if last else now_str()
+
+    # Existencias insumos (agrupado por categoria)
+    cur.execute("""
+        SELECT categoria, nombre, stock_actual, stock_min
+        FROM productos
+        WHERE tipo='insumo' AND activo=1
+        ORDER BY COALESCE(categoria,''), nombre
+    """)
+    rows = cur.fetchall()
+
+    existencias = []
+    grupo_actual = None
+    bucket = None
+
+    for row in rows:
+        grupo = row["categoria"] if row["categoria"] else "Insumos"
+
+        if grupo != grupo_actual:
+            if bucket:
+                existencias.append(bucket)
+            bucket = {"grupo": grupo, "items": []}
+            grupo_actual = grupo
+
+        stock = int(row["stock_actual"]) if row["stock_actual"] is not None else 0
+        min_stock = int(row["stock_min"]) if row["stock_min"] is not None else 0
+
+        bucket["items"].append({
+            "nombre": row["nombre"],
+            "stock": stock,
+            "bajo": stock <= min_stock
+        })
+
+    if bucket:
+        existencias.append(bucket)
+
+    # Máquinas (lista top 6)
+    cur.execute("""
+        SELECT nombre
+        FROM productos
+        WHERE tipo='maquina'
+        ORDER BY id DESC
+        LIMIT 6
+    """)
+    maquinas = [{"modelo": m["nombre"], "cliente": "aqui va el nombre del cliente"} for m in cur.fetchall()]
 
     conn.close()
+
+    estado_operativa_texto = (
+        f"{maquinas_revision} máquina en revisión"
+        if maquinas_revision == 1
+        else f"{maquinas_revision} máquinas en revisión"
+    )
 
     return render_template(
         "dashboard.html",
         username=session["username"],
+        total_productos=total_productos,
+        bajo_stock=bajo_stock,
+        caja_chica=caja_chica,
+        ingresos_hoy=ingresos_hoy,
+        caja_abierta=caja_abierta,
+        ultimo_reporte=ultimo_reporte,
+        existencias=existencias,
         maquinas_total=maquinas_total,
-        insumos_total=insumos_total,
-        activos_total=activos_total,
-        stock_bajo_total=stock_bajo_total,
-        caja_abierta=caja_abierta
+        maquinas_operativas=maquinas_operativas,
+        maquinas_revision=maquinas_revision,
+        estado_operativa_texto=estado_operativa_texto,
+        maquinas=maquinas
     )
 
 
@@ -395,9 +478,8 @@ def catalogo_toggle(tipo, pid):
 
 
 # ============================================================
-# MÓDULO CAJA (Sprint 3): TODO FUNCIONAL
+# MÓDULO CAJA (Sprint 3): FUNCIONAL
 # ============================================================
-
 def ensure_caja_estado(cur, dia: str):
     cur.execute("SELECT * FROM caja_estado WHERE dia=?", (dia,))
     row = cur.fetchone()
@@ -421,7 +503,7 @@ def caja_totales(cur, dia: str):
     """, (dia,))
     r1 = cur.fetchone()
 
-    # Totales banco (solo registro, no saldo real)
+    # Totales banco
     cur.execute("""
         SELECT
           COALESCE(SUM(CASE WHEN tipo_mov='ingreso' THEN monto ELSE 0 END),0) AS ing,
@@ -448,7 +530,6 @@ def caja_home():
     efectivo_inicial = float(estado["efectivo_inicial"]) if estado else 0.0
     saldo_efectivo = efectivo_inicial + float(efectivo_ing) - float(efectivo_egr)
 
-    # últimos 6 días por defecto
     end = date.today()
     start = end - timedelta(days=5)
     start_s = start.isoformat()
@@ -501,14 +582,12 @@ def caja_abrir():
             conn.close()
             return redirect(url_for("caja_abrir"))
 
-        # abrir caja (estado)
         cur.execute("""
             UPDATE caja_estado
             SET abierta=1, efectivo_inicial=?
             WHERE dia=?
         """, (efectivo_inicial, dia))
 
-        # registro apertura
         cur.execute("""
             INSERT INTO caja_aperturas (dia, efectivo_inicial, nota, fecha)
             VALUES (?, ?, ?, ?)
@@ -530,25 +609,23 @@ def caja_mov_nuevo():
     dia_default = today_str()
 
     if request.method == "POST":
-        tipo_mov = request.form.get("tipo_mov", "ingreso").strip()  # ingreso/egreso
-        metodo = request.form.get("metodo", "efectivo").strip()     # efectivo/banco
+        tipo_mov = request.form.get("tipo_mov", "ingreso").strip()
+        metodo = request.form.get("metodo", "efectivo").strip()
         monto_raw = request.form.get("monto", "0").strip()
         motivo = request.form.get("motivo", "").strip()
         referencia = request.form.get("referencia", "").strip()
         fecha_dia = request.form.get("dia", dia_default).strip()
         fecha_dia = parse_date_yyyy_mm_dd(fecha_dia, dia_default)
 
-        fecha_full = request.form.get("fecha_full", "").strip()  # opcional
+        fecha_full = request.form.get("fecha_full", "").strip()
         if not fecha_full:
             fecha_full = now_str()
         else:
-            # si solo ponen YYYY-MM-DD, le agregamos hora 00:00:00
             if len(fecha_full) == 10:
                 fecha_full = fecha_full + " 00:00:00"
 
         enviado_matriz = 1 if request.form.get("enviado_matriz") == "1" else 0
 
-        # validaciones
         if tipo_mov not in ("ingreso", "egreso"):
             flash("Tipo de movimiento inválido.")
             return redirect(url_for("caja_mov_nuevo"))
@@ -565,7 +642,6 @@ def caja_mov_nuevo():
             flash("Monto inválido (debe ser mayor a 0).")
             return redirect(url_for("caja_mov_nuevo"))
 
-        # Si es banco, referencia (comprobante) recomendado
         if metodo == "banco" and not referencia:
             flash("En pagos por banco, ingrese el número de comprobante (referencia).")
             return redirect(url_for("caja_mov_nuevo"))
@@ -573,7 +649,6 @@ def caja_mov_nuevo():
         conn = db_conn()
         cur = conn.cursor()
 
-        # asegurar estado del día (por si registras movimientos de días anteriores)
         ensure_caja_estado(cur, fecha_dia)
 
         cur.execute("""
@@ -594,7 +669,6 @@ def caja_mov_nuevo():
 @app.route("/caja/movimientos")
 @login_required
 def caja_movimientos_list():
-    # filtro por fechas (por defecto 6 días)
     end = request.args.get("end", "").strip()
     start = request.args.get("start", "").strip()
     metodo = request.args.get("metodo", "todos").strip()
@@ -626,7 +700,6 @@ def caja_movimientos_list():
     """, tuple(params))
     rows = cur.fetchall()
 
-    # Totales visibles arriba: Ingresos / Egresos
     cur.execute(f"""
         SELECT
           COALESCE(SUM(CASE WHEN tipo_mov='ingreso' THEN monto ELSE 0 END),0) AS ing,
@@ -712,6 +785,26 @@ def caja_cerrar():
         efectivo_egr=efectivo_egr,
         efectivo_final=efectivo_final
     )
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    # Si ya hay sesión, igual puede recuperar contraseña, pero normalmente lo mandamos al dashboard
+    if "username" in session:
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        correo = request.form.get("email", "").strip()
+
+        if not correo:
+            flash("Ingrese su correo para recuperar la contraseña.")
+            return redirect(url_for("forgot_password"))
+
+        # Demo: NO enviamos correo real en este prototipo
+        flash("✅ Solicitud enviada. MIKEN se contactará desde miken.heladeria@gmail.com.")
+        return redirect(url_for("login"))
+
+    return render_template("forgot_password.html")
+
 
 
 # --------------------
