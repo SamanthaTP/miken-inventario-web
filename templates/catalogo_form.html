@@ -1,87 +1,154 @@
 {% extends "layout.html" %}
 {% block content %}
 
-<div class="card form-card">
-  <div class="form-head">
-    <h2 style="margin:0;">
-      {% if modo=="nuevo" %}➕ Nuevo producto{% else %}✏ Editar producto{% endif %}
-      ({{ "Máquinas" if tipo=="maquina" else "Insumos" }})
-    </h2>
-    <a class="btn" href="{{ url_for('catalogo_maquinas' if tipo=='maquina' else 'catalogo_insumos') }}">← Volver</a>
-  </div>
+<div class="form-page">
+  <div class="form-card">
 
-  <p class="muted" style="margin:8px 0 16px;">Complete los datos del producto.</p>
+    <div class="form-head">
+      <div>
+        <h2 class="form-title">
+          {% if modo == "editar" %}
+            ✏ Editar producto ({{ "Máquinas" if tipo=="maquina" else "Insumos" }})
+          {% else %}
+            ➕ Nuevo producto ({{ "Máquinas" if tipo=="maquina" else "Insumos" }})
+          {% endif %}
+        </h2>
+        <p class="form-subtitle">Complete los datos del producto.</p>
+      </div>
 
-  <form method="POST" enctype="multipart/form-data" class="form-grid">
-    <div class="field">
-      <label>SKU / Modelo</label>
-      <input class="input" name="sku" value="{{ producto['sku'] if producto else '' }}" placeholder="Ej: MK-618DB">
+      <a class="btn" href="{% if tipo=='maquina' %}{{ url_for('catalogo_maquinas') }}{% else %}{{ url_for('catalogo_insumos') }}{% endif %}">← Volver</a>
     </div>
 
-    <div class="field">
-      <label>Nombre *</label>
-      <input class="input" name="nombre" required value="{{ producto['nombre'] if producto else '' }}" placeholder="Ej: Máquina Helado Soft 2 Tolvas">
-    </div>
+    <form method="POST"
+          enctype="multipart/form-data"
+          action="{% if modo=='editar' %}{{ url_for('catalogo_editar', tipo=tipo, pid=producto['id']) }}{% else %}{{ url_for('catalogo_nuevo', tipo=tipo) }}{% endif %}"
+          class="form-grid">
 
-    <div class="field">
-      <label>Categoría</label>
-      <select class="input" name="categoria">
-        <option value="">Seleccione…</option>
-        {% for c in categorias %}
-          <option value="{{ c }}" {% if producto and producto['categoria']==c %}selected{% endif %}>{{ c }}</option>
-        {% endfor %}
-      </select>
-    </div>
+      <div class="field">
+        <label class="field__label">SKU / Modelo</label>
+        <input class="field__input"
+               name="sku"
+               type="text"
+               value="{{ producto['sku'] if producto else '' }}"
+               placeholder="Ej: MK-618DB / TP1002 / BASE-VAN-1KG">
+      </div>
 
-    <div class="field">
-      <label>Unidad</label>
-      <select class="input" name="unidad">
-        <option value="">Seleccione…</option>
-        {% for u in unidades %}
-          <option value="{{ u }}" {% if producto and producto['unidad']==u %}selected{% endif %}>{{ u }}</option>
-        {% endfor %}
-      </select>
-    </div>
+      <div class="field field--span2">
+        <label class="field__label">Nombre *</label>
+        <input class="field__input"
+               name="nombre"
+               type="text"
+               required
+               value="{{ producto['nombre'] if producto else '' }}"
+               placeholder="Ej: Máquina de helado soft 2 sabores / Tarrina 4 oz lila">
+      </div>
 
-    <div class="field">
-      <label>Precio</label>
-      <input class="input" name="precio" type="number" step="0.01" value="{{ producto['precio'] if producto else 0 }}">
-    </div>
+      <div class="field">
+        <label class="field__label">Categoría</label>
 
-    <div class="field">
-      <label>Stock actual</label>
-      <input class="input" name="stock_actual" type="number" value="{{ producto['stock_actual'] if producto else 0 }}">
-    </div>
+        {# Mantiene select (deslizable) #}
+        <select class="field__select" name="categoria">
+          {% set cat = (producto['categoria'] if producto and producto['categoria'] else '') %}
+          <option value="" {% if cat=='' %}selected{% endif %}>Seleccione…</option>
 
-    <div class="field">
-      <label>Stock mínimo</label>
-      <input class="input" name="stock_min" type="number" value="{{ producto['stock_min'] if producto else 0 }}">
-    </div>
+          {% if tipo == 'maquina' %}
+            <option value="Helado soft" {% if cat=='Helado soft' %}selected{% endif %}>Helado soft</option>
+            <option value="Helado artesanal" {% if cat=='Helado artesanal' %}selected{% endif %}>Helado artesanal</option>
+            <option value="Paletas" {% if cat=='Paletas' %}selected{% endif %}>Paletas</option>
+            <option value="Granizadoras" {% if cat=='Granizadoras' %}selected{% endif %}>Granizadoras</option>
+            <option value="Milkshake" {% if cat=='Milkshake' %}selected{% endif %}>Milkshake</option>
+            <option value="Congelación" {% if cat=='Congelación' %}selected{% endif %}>Congelación</option>
+            <option value="Otros" {% if cat=='Otros' %}selected{% endif %}>Otros</option>
+          {% else %}
+            <option value="Bases de helado soft" {% if cat=='Bases de helado soft' %}selected{% endif %}>Bases de helado soft</option>
+            <option value="Tarrinas de papel" {% if cat=='Tarrinas de papel' %}selected{% endif %}>Tarrinas de papel</option>
+            <option value="Vasos PET" {% if cat=='Vasos PET' %}selected{% endif %}>Vasos PET</option>
+            <option value="Conos" {% if cat=='Conos' %}selected{% endif %}>Conos</option>
+            <option value="Toppings" {% if cat=='Toppings' %}selected{% endif %}>Toppings</option>
+            <option value="Otros" {% if cat=='Otros' %}selected{% endif %}>Otros</option>
+          {% endif %}
+        </select>
+      </div>
 
-    <div class="field">
-      <label>Imagen</label>
-      <input class="input" type="file" name="imagen" accept="image/png,image/jpeg,image/jpg,image/webp">
-      {% if producto and producto['imagen_filename'] %}
-        <div class="muted" style="margin-top:8px;">Imagen actual:</div>
-        <img class="thumb-preview" src="{{ url_for('static', filename='uploads/' ~ producto['imagen_filename']) }}" alt="preview">
+      <div class="field">
+        <label class="field__label">Unidad</label>
+
+        {# Mantiene select (deslizable) #}
+        {% set un = (producto['unidad'] if producto and producto['unidad'] else '') %}
+        <select class="field__select" name="unidad">
+          <option value="" {% if un=='' %}selected{% endif %}>Seleccione…</option>
+          <option value="unidad" {% if un=='unidad' %}selected{% endif %}>unidad</option>
+          <option value="caja" {% if un=='caja' %}selected{% endif %}>caja</option>
+          <option value="paquete" {% if un=='paquete' %}selected{% endif %}>paquete</option>
+          <option value="kg" {% if un=='kg' %}selected{% endif %}>kg</option>
+          <option value="litro" {% if un=='litro' %}selected{% endif %}>litro</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field__label">Precio</label>
+        <input class="field__input"
+               name="precio"
+               type="number"
+               step="0.01"
+               min="0"
+               value="{{ producto['precio'] if producto else 0 }}"
+               placeholder="0.00">
+      </div>
+
+      <div class="field">
+        <label class="field__label">Stock actual</label>
+        <input class="field__input"
+               name="stock_actual"
+               type="number"
+               step="1"
+               min="0"
+               value="{{ producto['stock_actual'] if producto else 0 }}"
+               placeholder="0">
+      </div>
+
+      <div class="field">
+        <label class="field__label">Stock mínimo</label>
+        <input class="field__input"
+               name="stock_min"
+               type="number"
+               step="1"
+               min="0"
+               value="{{ producto['stock_min'] if producto else 0 }}"
+               placeholder="0">
+      </div>
+
+      <div class="field field--span2">
+        <label class="field__label">Imagen</label>
+        <div class="file-row">
+          <input class="field__file" type="file" name="imagen" accept=".png,.jpg,.jpeg,.webp">
+          {% if producto and producto['imagen_filename'] %}
+            <div class="file-hint">
+              Actual: <span class="pill">{{ producto['imagen_filename'] }}</span>
+            </div>
+          {% else %}
+            <div class="file-hint muted">Opcional (png/jpg/jpeg/webp).</div>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if modo == "editar" %}
+      <div class="field">
+        <label class="field__label">Estado</label>
+        <select class="field__select" name="activo">
+          <option value="1" {% if producto and producto['activo']==1 %}selected{% endif %}>Activo</option>
+          <option value="0" {% if producto and producto['activo']==0 %}selected{% endif %}>Inactivo</option>
+        </select>
+      </div>
       {% endif %}
-    </div>
 
-    {% if modo=="editar" %}
-    <div class="field">
-      <label>Estado</label>
-      <select class="input" name="activo">
-        <option value="1" {% if producto and producto['activo']==1 %}selected{% endif %}>Activo</option>
-        <option value="0" {% if producto and producto['activo']==0 %}selected{% endif %}>Inactivo</option>
-      </select>
-    </div>
-    {% endif %}
+      <div class="form-actions field--span2">
+        <button class="btn btn--primary" type="submit">Guardar</button>
+        <a class="btn" href="{% if tipo=='maquina' %}{{ url_for('catalogo_maquinas') }}{% else %}{{ url_for('catalogo_insumos') }}{% endif %}">Cancelar</a>
+      </div>
 
-    <div class="form-actions">
-      <button class="btn btn--primary" type="submit">Guardar</button>
-      <a class="btn" href="{{ url_for('catalogo_maquinas' if tipo=='maquina' else 'catalogo_insumos') }}">Cancelar</a>
-    </div>
-  </form>
+    </form>
+  </div>
 </div>
 
 {% endblock %}
