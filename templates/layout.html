@@ -2,83 +2,82 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ title or "MIKEN - Portal" }}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ title if title else "MIKEN - Sistema" }}</title>
 
+  <!-- ✅ CSS con cache-buster para que el navegador no use el viejo -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
-<body>
 
-<header class="topbar">
-  <div class="topbar__inner">
+<body class="{{ page_class if page_class else '' }}">
 
-    <a class="brand" href="{{ url_for('dashboard') }}">
-      <img class="brand__logo" src="{{ url_for('static', filename='img/miken_logo.png') }}" alt="MIKEN">
-    </a>
+  {% if not hide_nav %}
+  <header class="topbar">
+    <div class="topbar__inner">
 
-    <nav class="nav">
-      <a class="nav__btn" href="{{ url_for('dashboard') }}">🏠 Dashboard</a>
-      <a class="nav__btn" href="{{ url_for('catalogo_maquinas') }}">🧊 Máquinas</a>
-      <a class="nav__btn" href="{{ url_for('catalogo_insumos') }}">📦 Insumos</a>
-      <a class="nav__btn" href="{{ url_for('stock_bajo') }}">⚠ Stock bajo</a>
-      <a class="nav__btn nav__btn--primary" href="{{ url_for('caja_home') }}">💰 Caja</a>
-      <a class="nav__btn" href="{{ url_for('caja_mov_nuevo') }}">➕ Movimiento</a>
-      <a class="nav__btn nav__btn--danger" href="{{ url_for('logout') }}">Salir</a>
-    </nav>
+      <a class="brand" href="{{ url_for('dashboard') }}">
+        <img class="brand__logo" src="{{ url_for('static', filename='img/miken_logo.png') }}" alt="MIKEN">
+      </a>
 
-    {% if session.get("username") %}
-    <div class="userbox">
-      <button class="userbox__btn" type="button" onclick="toggleUserMenu()">
-        <span class="userbox__avatar">Q</span>
-        <span class="userbox__name">{{ session.get("username") }}</span>
-        <span class="userbox__caret">▾</span>
-      </button>
+      <nav class="nav">
+        <a class="nav__btn" href="{{ url_for('dashboard') }}">🏠 Dashboard</a>
+        <a class="nav__btn" href="{{ url_for('catalogo_maquinas') }}">🧊 Máquinas</a>
+        <a class="nav__btn" href="{{ url_for('catalogo_insumos') }}">📦 Insumos</a>
+        <a class="nav__btn" href="{{ url_for('stock_bajo') }}">⚠ Stock bajo</a>
+        <a class="nav__btn" href="{{ url_for('caja_home') }}">💵 Caja</a>
+        <a class="nav__btn nav__btn--primary" href="{{ url_for('caja_mov_nuevo') }}">➕ Movimiento</a>
+        <a class="nav__btn nav__btn--danger" href="{{ url_for('logout') }}">Salir</a>
+      </nav>
 
-      <div id="userMenu" class="userbox__menu">
-        <a href="#" onclick="alert('Luego implementamos cambiar contraseña'); return false;">🔒 Cambiar contraseña</a>
-        <a href="{{ url_for('logout') }}">🚪 Cerrar sesión</a>
+      <div class="userbox">
+        <button class="userbox__btn" type="button" onclick="toggleUserMenu()">
+          <span class="userbox__avatar">{{ (username[0] if username else 'A')|upper }}</span>
+          <span class="userbox__name">{{ username if username else 'admin' }}</span>
+          <span class="userbox__caret">▾</span>
+        </button>
+
+        <div id="usermenu" class="userbox__menu">
+          <a href="{{ url_for('dashboard') }}">Mi panel</a>
+          <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+        </div>
       </div>
+
     </div>
-    {% endif %}
+  </header>
+  {% endif %}
 
-  </div>
-</header>
-
-<main class="container">
-
-  {% with messages = get_flashed_messages() %}
-    {% if messages %}
+  <main class="container">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
       <div class="flashwrap">
-        {% for m in messages %}
-          <div class="flash">{{ m }}</div>
+        {% for message in messages %}
+          <div class="flash">{{ message }}</div>
         {% endfor %}
       </div>
-    {% endif %}
-  {% endwith %}
+      {% endif %}
+    {% endwith %}
 
-  {% block content %}{% endblock %}
-</main>
+    {% block content %}{% endblock %}
+  </main>
 
-<footer class="footer">
-  <div class="container footer__inner">
-    <span>© {{ (now() if false else "") }} MIKEN - Sistema interno</span>
-    <span>Quito • Machala</span>
-  </div>
-</footer>
+  <footer class="footer">
+    <div class="footer__inner">
+      <div>© 2026 MIKEN. Todos los derechos reservados.</div>
+      <div>Quito – Av. Ilaló – Quimbitas Plaza</div>
+    </div>
+  </footer>
 
-<script>
-function toggleUserMenu(){
-  const m = document.getElementById('userMenu');
-  if(!m) return;
-  m.classList.toggle('open');
-}
-document.addEventListener('click', (e)=>{
-  const btn = document.querySelector('.userbox__btn');
-  const menu = document.getElementById('userMenu');
-  if(!menu || !btn) return;
-  if(!btn.contains(e.target) && !menu.contains(e.target)) menu.classList.remove('open');
-});
-</script>
-
+  <script>
+    function toggleUserMenu(){
+      const m = document.getElementById("usermenu");
+      if(m) m.classList.toggle("open");
+    }
+    document.addEventListener("click", (e)=>{
+      const m = document.getElementById("usermenu");
+      if(!m) return;
+      if(!e.target.closest(".userbox")) m.classList.remove("open");
+    });
+  </script>
 </body>
 </html>
+

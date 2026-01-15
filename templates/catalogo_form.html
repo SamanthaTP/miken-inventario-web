@@ -1,75 +1,84 @@
 {% extends "layout.html" %}
 {% block content %}
 
-<div class="card" style="max-width:900px; margin:0 auto;">
-  <h2>
-    {% if modo == "nuevo" %}
-      ➕ Nuevo producto ({{ "Máquinas" if tipo=="maquina" else "Insumos" }})
-    {% else %}
-      ✏️ Editar producto ({{ "Máquinas" if tipo=="maquina" else "Insumos" }})
+<div class="card form-card">
+  <div class="form-head">
+    <h2 style="margin:0;">
+      {% if modo=="nuevo" %}➕ Nuevo producto{% else %}✏ Editar producto{% endif %}
+      ({{ "Máquinas" if tipo=="maquina" else "Insumos" }})
+    </h2>
+    <a class="btn" href="{{ url_for('catalogo_maquinas' if tipo=='maquina' else 'catalogo_insumos') }}">← Volver</a>
+  </div>
+
+  <p class="muted" style="margin:8px 0 16px;">Complete los datos del producto.</p>
+
+  <form method="POST" enctype="multipart/form-data" class="form-grid">
+    <div class="field">
+      <label>SKU / Modelo</label>
+      <input class="input" name="sku" value="{{ producto['sku'] if producto else '' }}" placeholder="Ej: MK-618DB">
+    </div>
+
+    <div class="field">
+      <label>Nombre *</label>
+      <input class="input" name="nombre" required value="{{ producto['nombre'] if producto else '' }}" placeholder="Ej: Máquina Helado Soft 2 Tolvas">
+    </div>
+
+    <div class="field">
+      <label>Categoría</label>
+      <select class="input" name="categoria">
+        <option value="">Seleccione…</option>
+        {% for c in categorias %}
+          <option value="{{ c }}" {% if producto and producto['categoria']==c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Unidad</label>
+      <select class="input" name="unidad">
+        <option value="">Seleccione…</option>
+        {% for u in unidades %}
+          <option value="{{ u }}" {% if producto and producto['unidad']==u %}selected{% endif %}>{{ u }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Precio</label>
+      <input class="input" name="precio" type="number" step="0.01" value="{{ producto['precio'] if producto else 0 }}">
+    </div>
+
+    <div class="field">
+      <label>Stock actual</label>
+      <input class="input" name="stock_actual" type="number" value="{{ producto['stock_actual'] if producto else 0 }}">
+    </div>
+
+    <div class="field">
+      <label>Stock mínimo</label>
+      <input class="input" name="stock_min" type="number" value="{{ producto['stock_min'] if producto else 0 }}">
+    </div>
+
+    <div class="field">
+      <label>Imagen</label>
+      <input class="input" type="file" name="imagen" accept="image/png,image/jpeg,image/jpg,image/webp">
+      {% if producto and producto['imagen_filename'] %}
+        <div class="muted" style="margin-top:8px;">Imagen actual:</div>
+        <img class="thumb-preview" src="{{ url_for('static', filename='uploads/' ~ producto['imagen_filename']) }}" alt="preview">
+      {% endif %}
+    </div>
+
+    {% if modo=="editar" %}
+    <div class="field">
+      <label>Estado</label>
+      <select class="input" name="activo">
+        <option value="1" {% if producto and producto['activo']==1 %}selected{% endif %}>Activo</option>
+        <option value="0" {% if producto and producto['activo']==0 %}selected{% endif %}>Inactivo</option>
+      </select>
+    </div>
     {% endif %}
-  </h2>
-  <p class="muted" style="margin-top:0;">Complete los datos del producto.</p>
 
-  <form method="post" enctype="multipart/form-data">
-    <div class="row">
-      <div>
-        <label>SKU / Modelo</label>
-        <input name="sku" value="{{ producto['sku'] if producto else '' }}" placeholder="Ej: MK-618DB">
-      </div>
-      <div>
-        <label>Nombre *</label>
-        <input name="nombre" required value="{{ producto['nombre'] if producto else '' }}" placeholder="Ej: Máquina Helado Soft 2 Tolvas">
-      </div>
-    </div>
-
-    <div class="row">
-      <div>
-        <label>Categoría</label>
-        <input name="categoria" value="{{ producto['categoria'] if producto else '' }}" placeholder="Ej: Helado soft">
-      </div>
-      <div>
-        <label>Unidad</label>
-        <input name="unidad" value="{{ producto['unidad'] if producto else '' }}" placeholder="Ej: unidad / caja / paquete">
-      </div>
-    </div>
-
-    <div class="row">
-      <div>
-        <label>Precio</label>
-        <input name="precio" value="{{ producto['precio'] if producto else '0' }}" placeholder="0">
-      </div>
-      <div>
-        <label>Stock actual</label>
-        <input name="stock_actual" value="{{ producto['stock_actual'] if producto else '0' }}" placeholder="0">
-      </div>
-    </div>
-
-    <div class="row">
-      <div>
-        <label>Stock mínimo</label>
-        <input name="stock_min" value="{{ producto['stock_min'] if producto else '0' }}" placeholder="0">
-      </div>
-
-      <div>
-        <label>Imagen (png/jpg/jpeg/webp)</label>
-        <input type="file" name="imagen" accept=".png,.jpg,.jpeg,.webp">
-        {% if producto and producto["imagen_filename"] %}
-          <p class="muted" style="margin:6px 0 0 0;">Actual: {{ producto["imagen_filename"] }}</p>
-        {% endif %}
-      </div>
-    </div>
-
-    {% if modo == "editar" %}
-    <label>Activo</label>
-    <select name="activo">
-      <option value="1" {% if producto and producto["activo"]==1 %}selected{% endif %}>Sí</option>
-      <option value="0" {% if producto and producto["activo"]==0 %}selected{% endif %}>No</option>
-    </select>
-    {% endif %}
-
-    <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;">
-      <button class="btn primary" type="submit">Guardar</button>
+    <div class="form-actions">
+      <button class="btn btn--primary" type="submit">Guardar</button>
       <a class="btn" href="{{ url_for('catalogo_maquinas' if tipo=='maquina' else 'catalogo_insumos') }}">Cancelar</a>
     </div>
   </form>

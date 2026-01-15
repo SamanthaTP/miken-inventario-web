@@ -8,6 +8,15 @@ from flask import (
     url_for, session, flash, make_response
 )
 
+CATEGORIAS_MAQUINAS = [
+    "Helado soft", "Helado artesanal", "Granizadora", "Milkshake",
+    "Waflera", "Crepera", "Donas", "Congelador", "Regulador", "Otros"
+]
+CATEGORIAS_INSUMOS = [
+    "Bases", "Conos", "Tarrinas", "Vasos", "Toppings", "Repuestos", "Otros"
+]
+UNIDADES = ["unidad", "caja", "paquete", "kit", "bolsa", "litro", "kilogramo"]
+
 # --------------------
 # CONFIGURACIÓN GENERAL
 # --------------------
@@ -103,7 +112,18 @@ def login():
         flash("Usuario o contraseña incorrectos.")
         return redirect(url_for("login"))
 
-    return render_template("login.html")
+    return render_template("login.html", hide_nav=True, page_class="page-login", title="MIKEN - Iniciar sesión")
+
+
+
+
+@app.after_request
+def no_cache(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["Vary"] = "Cookie"
+    return response
 
 
 @app.route("/logout")
@@ -111,7 +131,12 @@ def logout():
     session.clear()
     resp = make_response(redirect(url_for("login")))
     resp.delete_cookie(app.config.get("SESSION_COOKIE_NAME", "session"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
     return resp
+
+
 
 
 # --------------------
@@ -250,25 +275,57 @@ def catalogo_home():
 
 def _listar_catalogo(tipo: str):
     q = request.args.get("q", "").strip()
+    page = request.args.get("page", "1").strip()
+
+    try:
+        page = int(page)
+        if page < 1:
+            page = 1
+    except:
+        page = 1
+
+    per_page = 6
+    offset = (page - 1) * per_page
 
     conn = db_conn()
     cur = conn.cursor()
 
-    if q:
-        cur.execute("""
-            SELECT * FROM productos
-            WHERE tipo = ?
-              AND (sku LIKE ? OR nombre LIKE ? OR categoria LIKE ?)
-            ORDER BY id DESC
-        """, (tipo, f"%{q}%", f"%{q}%", f"%{q}%"))
-    else:
-        cur.execute("SELECT * FROM productos WHERE tipo = ? ORDER BY id DESC", (tipo,))
+    where = " WHERE tipo = ? "
+    params = [tipo]
 
+    if q:
+        where += " AND (sku LIKE ? OR nombre LIKE ? OR categoria LIKE ?) "
+        params += [f"%{q}%", f"%{q}%", f"%{q}%"]
+
+    # total
+    cur.execute(f"SELECT COUNT(*) AS c FROM productos {where}", tuple(params))
+    total = cur.fetchone()["c"]
+
+    # pagina
+    cur.execute(f"""
+        SELECT * FROM productos
+        {where}
+        ORDER BY id DESC
+        LIMIT ? OFFSET ?
+    """, tuple(params + [per_page, offset]))
     productos = cur.fetchall()
+
     conn.close()
 
+    total_pages = (total + per_page - 1) // per_page
+
     titulo = "Catálogo de Máquinas" if tipo == "maquina" else "Catálogo de Insumos"
-    return render_template("catalogo_list.html", productos=productos, q=q, tipo=tipo, titulo=titulo)
+
+    return render_template(
+        "catalogo_list.html",
+        productos=productos,
+        q=q,
+        tipo=tipo,
+        titulo=titulo,
+        page=page,
+        total_pages=total_pages
+    )
+
 
 
 @app.route("/catalogo/maquinas")
@@ -365,7 +422,9 @@ def catalogo_nuevo(tipo):
         flash("Producto creado ✅")
         return redirect(url_for("catalogo_maquinas" if tipo == "maquina" else "catalogo_insumos"))
 
-    return render_template("catalogo_form.html", modo="nuevo", producto=None, tipo=tipo)
+    cats = CATEGORIAS_MAQUINAS if tipo=="maquina" else CATEGORIAS_INSUMOS
+    return render_template("catalogo_form.html", modo="nuevo", producto=None, tipo=tipo, categorias=cats, unidades=UNIDADES)
+
 
 
 # --------------------
@@ -447,8 +506,9 @@ def catalogo_editar(tipo, pid):
         flash("Producto actualizado ✅")
         return redirect(url_for("catalogo_maquinas" if tipo == "maquina" else "catalogo_insumos"))
 
-    conn.close()
-    return render_template("catalogo_form.html", modo="editar", producto=producto, tipo=tipo)
+    cats = CATEGORIAS_MAQUINAS if tipo=="maquina" else CATEGORIAS_INSUMOS
+    return render_template("catalogo_form.html", modo="editar", producto=producto, tipo=tipo, categorias=cats, unidades=UNIDADES)
+
 
 
 @app.route("/catalogo/<tipo>/<int:pid>/toggle", methods=["POST"])
@@ -803,7 +863,9 @@ def forgot_password():
         flash("✅ Solicitud enviada. MIKEN se contactará desde miken.heladeria@gmail.com.")
         return redirect(url_for("login"))
 
-    return render_template("forgot_password.html")
+    return render_template("forgot_password.html", hide_nav=True, page_class="page-login", title="MIKEN - Recuperar contraseña")
+
+
 
 
 

@@ -2,115 +2,74 @@
 {% block content %}
 
 <div class="card">
-  <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+  <div class="catalog-head">
     <div>
-      <h2 style="margin-bottom:6px;">{{ titulo }}</h2>
-      <p class="muted" style="margin:0;">Gestión de productos con imagen, stock y estado.</p>
+      <h2 style="margin:0;">{{ titulo }}</h2>
+      <p class="muted" style="margin:6px 0 0;">Gestión de productos con imagen, stock y estado.</p>
     </div>
 
-    {% if tipo in ["maquina","insumo"] %}
-      <a class="btn primary" href="{{ url_for('catalogo_nuevo', tipo=tipo) }}">➕ Nuevo producto</a>
+    <a class="btn btn--primary" href="{{ url_for('catalogo_nuevo', tipo=tipo) }}">➕ Nuevo producto</a>
+  </div>
+
+  <form method="GET" class="catalog-search">
+    <input class="input" type="text" name="q" value="{{ q }}" placeholder="Buscar por SKU, nombre o categoría">
+    <button class="btn" type="submit">Buscar</button>
+    <a class="btn" href="{{ url_for('catalogo_maquinas' if tipo=='maquina' else 'catalogo_insumos') }}">Limpiar</a>
+  </form>
+
+  <div class="catalog-grid">
+    {% if productos and productos|length > 0 %}
+      {% for p in productos %}
+      <div class="product-card">
+        <div class="product-card__imgwrap">
+          {% if p["imagen_filename"] %}
+            <img class="product-thumb" src="{{ url_for('static', filename='uploads/' ~ p['imagen_filename']) }}" alt="imagen">
+          {% else %}
+            <div class="product-thumb--empty">Sin imagen</div>
+          {% endif %}
+        </div>
+
+        <div class="product-card__body">
+          <p class="product-title">{{ p["nombre"] }}</p>
+          <p class="product-meta">
+            <b>SKU:</b> {{ p["sku"] if p["sku"] else "-" }}<br>
+            <b>Categoría:</b> {{ p["categoria"] if p["categoria"] else "-" }}<br>
+            <b>Stock:</b> {{ p["stock_actual"] }} | <b>Mín:</b> {{ p["stock_min"] }}
+          </p>
+
+          <div class="product-actions">
+            <a class="btn" href="{{ url_for('catalogo_editar', tipo=tipo, pid=p['id']) }}">✏ Editar</a>
+
+            <form method="POST" action="{{ url_for('catalogo_toggle', tipo=tipo, pid=p['id']) }}">
+              <button class="btn {% if p['activo']==1 %}btn--danger{% endif %}" type="submit">
+                {% if p["activo"]==1 %}Desactivar{% else %}Activar{% endif %}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="muted">No hay productos para mostrar.</p>
     {% endif %}
   </div>
 
-  <form method="get" style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-    <input name="q" value="{{ q }}" placeholder="Buscar por SKU, nombre o categoría" style="flex:1; min-width:240px;">
-    <button class="btn" type="submit">Buscar</button>
-    <a class="btn ghost" href="{{ request.path }}">Limpiar</a>
-  </form>
-
-  <div style="overflow:auto; margin-top:12px;">
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Imagen</th>
-          <th>SKU / Modelo</th>
-          <th>Nombre</th>
-          <th>Categoría</th>
-          <th>Unidad</th>
-          <th>Precio</th>
-          <th>Stock</th>
-          <th>Mín</th>
-          <th>Activo</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if productos and productos|length > 0 %}
-          {% for p in productos %}
-          <tr>
-            <td>{{ p["id"] }}</td>
-            <td class="imgcell">
-              {% if p["imagen_filename"] %}
-                <img src="{{ url_for('static', filename='uploads/' ~ p['imagen_filename']) }}" alt="img">
-              {% else %}
-                <span class="muted">—</span>
-              {% endif %}
-            </td>
-            <td>{{ p["sku"] if p["sku"] else "—" }}</td>
-            <td><b>{{ p["nombre"] }}</b></td>
-            <td>{{ p["categoria"] if p["categoria"] else "—" }}</td>
-            <td>{{ p["unidad"] if p["unidad"] else "—" }}</td>
-            <td>${{ "%.2f"|format(p["precio"]) }}</td>
-            <td>
-              {% if p["stock_actual"] <= p["stock_min"] and p["activo"] == 1 %}
-                <span class="pill low">{{ p["stock_actual"] }}</span>
-              {% else %}
-                {{ p["stock_actual"] }}
-              {% endif %}
-            </td>
-            <td>{{ p["stock_min"] }}</td>
-            <td>
-              {% if p["activo"] == 1 %}
-                <span class="pill ok">Sí</span>
-              {% else %}
-                <span class="pill off">No</span>
-              {% endif %}
-            </td>
-            <td style="white-space:nowrap;">
-              {% if tipo in ["maquina","insumo"] %}
-                <a class="btn" href="{{ url_for('catalogo_editar', tipo=tipo, pid=p['id']) }}">✏️ Editar</a>
-                <form method="post" action="{{ url_for('catalogo_toggle', tipo=tipo, pid=p['id']) }}" style="display:inline;">
-                  <button class="btn danger" type="submit">
-                    {% if p["activo"] == 1 %}Desactivar{% else %}Activar{% endif %}
-                  </button>
-                </form>
-              {% else %}
-                <span class="muted">—</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        {% else %}
-          <tr>
-            <td colspan="11" class="muted">No hay productos para mostrar.</td>
-          </tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </div>
-
   {% if total_pages and total_pages > 1 %}
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap;">
-    <div class="muted">
-      Mostrando página <b>{{ page }}</b> de <b>{{ total_pages }}</b> · Total registros: <b>{{ total }}</b>
+  <div class="pagination">
+    {% if page > 1 %}
+      <a class="btn" href="{{ url_for('catalogo_maquinas' if tipo=='maquina' else 'catalogo_insumos', q=q, page=page-1) }}">← Anterior</a>
+    {% endif %}
+
+    <div class="pagination__info">
+      Página <b>{{ page }}</b> de <b>{{ total_pages }}</b>
     </div>
 
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      {% if page > 1 %}
-        <a class="btn" href="{{ request.path }}?q={{ q }}&page={{ page-1 }}">← Anterior</a>
-      {% endif %}
-      {% if page < total_pages %}
-        <a class="btn" href="{{ request.path }}?q={{ q }}&page={{ page+1 }}">Siguiente →</a>
-      {% endif %}
-    </div>
+    {% if page < total_pages %}
+      <a class="btn" href="{{ url_for('catalogo_maquinas' if tipo=='maquina' else 'catalogo_insumos', q=q, page=page+1) }}">Siguiente →</a>
+    {% endif %}
   </div>
   {% endif %}
 
-  <div style="margin-top:12px;">
-    <a class="btn" href="{{ url_for('dashboard') }}">↩ Volver a Dashboard</a>
-  </div>
 </div>
 
 {% endblock %}

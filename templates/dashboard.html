@@ -2,44 +2,57 @@
 {% block content %}
 
 <div class="card">
-  <h2>📊 Dashboard</h2>
-  <p class="muted" style="margin-top:0;">Resumen rápido del inventario y movimientos.</p>
+  <h2 style="margin:0;">📊 Dashboard</h2>
+  <p class="muted" style="margin-top:6px;">Resumen rápido del inventario y caja.</p>
 
-  <div class="row" style="margin-top:14px;">
+  <div class="grid" style="margin-top:14px;">
+
+    <!-- Máquinas -->
     <div class="card" style="padding:14px;">
       <h3 style="margin:0 0 6px 0;">🧊 Máquinas</h3>
       <div style="font-size:28px; font-weight:900;">{{ maquinas_total }}</div>
       <a class="btn" href="{{ url_for('catalogo_maquinas') }}" style="margin-top:10px;">Ver catálogo</a>
     </div>
 
+    <!-- Insumos -->
     <div class="card" style="padding:14px;">
       <h3 style="margin:0 0 6px 0;">📦 Insumos</h3>
       <div style="font-size:28px; font-weight:900;">{{ insumos_total }}</div>
       <a class="btn" href="{{ url_for('catalogo_insumos') }}" style="margin-top:10px;">Ver catálogo</a>
     </div>
-  </div>
 
-  <div class="row" style="margin-top:12px;">
+    <!-- Activos -->
     <div class="card" style="padding:14px;">
       <h3 style="margin:0 0 6px 0;">✅ Activos</h3>
       <div style="font-size:28px; font-weight:900;">{{ activos_total }}</div>
       <span class="muted">Productos activos en sistema</span>
     </div>
 
+    <!-- Stock bajo -->
     <div class="card" style="padding:14px;">
       <h3 style="margin:0 0 6px 0;">⚠ Stock bajo</h3>
       <div style="font-size:28px; font-weight:900;">{{ stock_bajo_total }}</div>
       <a class="btn" href="{{ url_for('stock_bajo') }}" style="margin-top:10px;">Ver alerta</a>
     </div>
+
   </div>
 
-  <!-- Inventario (YA NO ES PRÓXIMAMENTE) -->
+  <!-- Caja / Movimientos -->
   <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
-    <a class="btn primary" href="{{ url_for('caja_mov_nuevo') }}">➕ Registrar movimiento</a>
-    <a class="btn" href="{{ url_for('caja_movimientos_list') }}">📜 Historial de movimientos</a>
+    <a class="btn btn--primary" href="{{ url_for('caja_mov_nuevo') }}">➕ Registrar movimiento</a>
+    <a class="btn" href="{{ url_for('caja_movimientos_list') }}">📄 Historial de movimientos</a>
+
+    {% if caja_abierta == 1 %}
+      <span class="btn" style="cursor:default; background:#eafff3; border-color:#b7f0d0; color:#0f5132;">
+        🟢 Caja abierta hoy
+      </span>
+    {% else %}
+      <span class="btn" style="cursor:default; background:#fff3f3; border-color:#f3c2c2; color:#6b1111;">
+        🔴 Caja cerrada hoy
+      </span>
+    {% endif %}
   </div>
 
 </div>
 
 {% endblock %}
-
