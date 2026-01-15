@@ -281,7 +281,7 @@ def _listar_catalogo(tipo: str):
         page = int(page)
         if page < 1:
             page = 1
-    except:
+    except ValueError:
         page = 1
 
     per_page = 6
@@ -290,26 +290,26 @@ def _listar_catalogo(tipo: str):
     conn = db_conn()
     cur = conn.cursor()
 
-    where = " WHERE tipo = ? "
+    where = "WHERE tipo = ?"
     params = [tipo]
 
     if q:
-        where += " AND (sku LIKE ? OR nombre LIKE ? OR categoria LIKE ?) "
+        where += " AND (sku LIKE ? OR nombre LIKE ? OR categoria LIKE ?)"
         params += [f"%{q}%", f"%{q}%", f"%{q}%"]
 
-    # total
+    # total para paginación
     cur.execute(f"SELECT COUNT(*) AS c FROM productos {where}", tuple(params))
     total = cur.fetchone()["c"]
 
-    # pagina
+    # filas
     cur.execute(f"""
-        SELECT * FROM productos
+        SELECT id, sku, nombre, categoria, stock_actual, stock_min, imagen_filename, activo
+        FROM productos
         {where}
         ORDER BY id DESC
         LIMIT ? OFFSET ?
     """, tuple(params + [per_page, offset]))
     productos = cur.fetchall()
-
     conn.close()
 
     total_pages = (total + per_page - 1) // per_page
@@ -323,7 +323,8 @@ def _listar_catalogo(tipo: str):
         tipo=tipo,
         titulo=titulo,
         page=page,
-        total_pages=total_pages
+        total_pages=total_pages,
+        total=total
     )
 
 
@@ -343,25 +344,53 @@ def catalogo_insumos():
 @app.route("/inventario/stock-bajo")
 @login_required
 def stock_bajo():
+    q = request.args.get("q", "").strip()
+    page = request.args.get("page", "1").strip()
+
+    try:
+        page = int(page)
+        if page < 1:
+            page = 1
+    except ValueError:
+        page = 1
+
+    per_page = 6
+    offset = (page - 1) * per_page
+
     conn = db_conn()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT *
+    where = "WHERE activo=1 AND stock_actual <= stock_min"
+    params = []
+
+    if q:
+        where += " AND (sku LIKE ? OR nombre LIKE ? OR categoria LIKE ?)"
+        params += [f"%{q}%", f"%{q}%", f"%{q}%"]
+
+    cur.execute(f"SELECT COUNT(*) AS c FROM productos {where}", tuple(params))
+    total = cur.fetchone()["c"]
+
+    cur.execute(f"""
+        SELECT id, tipo, sku, nombre, categoria, stock_actual, stock_min, imagen_filename, activo
         FROM productos
-        WHERE activo = 1
-          AND stock_actual <= stock_min
+        {where}
         ORDER BY tipo, nombre
-    """)
+        LIMIT ? OFFSET ?
+    """, tuple(params + [per_page, offset]))
     productos = cur.fetchall()
     conn.close()
+
+    total_pages = (total + per_page - 1) // per_page
 
     return render_template(
         "catalogo_list.html",
         productos=productos,
-        q="",
+        q=q,
         tipo="todos",
-        titulo="⚠ Productos con Stock Bajo"
+        titulo="⚠ Productos con Stock Bajo",
+        page=page,
+        total_pages=total_pages,
+        total=total
     )
 
 
