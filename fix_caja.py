@@ -2,64 +2,77 @@ import sqlite3
 
 DB_NAME = "miken.db"
 
-def table_exists(cur, table):
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
-    return cur.fetchone() is not None
-
-def column_exists(cur, table, col):
-    cur.execute(f"PRAGMA table_info({table})")
-    cols = [r[1] for r in cur.fetchall()]
-    return col in cols
-
-def migrate_caja():
+def main():
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
 
-    # 1) Detectar tabla de movimientos de caja (por nombre típico)
-    candidatos = ["caja_movimientos", "caja_mov", "caja_chica_movimientos", "movimientos_caja", "caja_chica_mov"]
-    tabla = None
-    for t in candidatos:
-        if table_exists(cur, t):
-            tabla = t
-            break
+    # 1) Ver registro conflictivo (para confirmar)
+    try:
+        cur.execute("SELECT id, tipo_mov, metodo, enviado_matriz, dia, fecha FROM caja_movimientos WHERE id=1")
+        print("ID=1:", cur.fetchone())
+    except Exception as e:
+        print("No pude leer caja_movimientos:", e)
 
-    if not tabla:
-        # Si no existe, la creamos con el esquema mínimo (ajústalo luego si ya tienes otro)
-        tabla = "caja_movimientos"
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS caja_movimientos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo_mov TEXT NOT NULL DEFAULT 'ingreso',   -- ingreso / egreso
-            monto REAL NOT NULL DEFAULT 0,
-            metodo TEXT NOT NULL DEFAULT 'efectivo',    -- efectivo / banco
-            comprobante TEXT,
-            motivo TEXT,
-            fecha TEXT NOT NULL DEFAULT (date('now'))
-        )
-        """)
+    # 2) Normalizar tipo_mov
+    cur.execute("""
+        UPDATE caja_movimientos
+        SET tipo_mov = lower(trim(tipo_mov))
+        WHERE tipo_mov IS NOT NULL
+    """)
 
-    # 2) Asegurar columnas necesarias
-    if not column_exists(cur, tabla, "tipo_mov"):
-        cur.execute(f"ALTER TABLE {tabla} ADD COLUMN tipo_mov TEXT NOT NULL DEFAULT 'ingreso'")
+    # Mapear valores comunes incorrectos
+    cur.execute("""
+        UPDATE caja_movimientos
+        SET tipo_mov = 'ingreso'
+        WHERE tipo_mov NOT IN ('ingreso','egreso') OR tipo_mov IS NULL OR trim(tipo_mov)=''
+    """)
 
-    if not column_exists(cur, tabla, "monto"):
-        cur.execute(f"ALTER TABLE {tabla} ADD COLUMN monto REAL NOT NULL DEFAULT 0")
+    # 3) Normalizar metodo
+    cur.execute("""
+        UPDATE caja_movimientos
+        SET metodo = lower(trim(metodo))
+        WHERE metodo IS NOT NULL
+    """)
 
-    if not column_exists(cur, tabla, "metodo"):
-        cur.execute(f"ALTER TABLE {tabla} ADD COLUMN metodo TEXT NOT NULL DEFAULT 'efectivo'")
+    cur.execute("""
+        UPDATE caja_movimientos
+        SET metodo = 'efectivo'
+        WHERE metodo NOT IN ('efectivo','banco') OR metodo IS NULL OR trim(metodo)=''
+    """)
 
-    if not column_exists(cur, tabla, "comprobante"):
-        cur.execute(f"ALTER TABLE {tabla} ADD COLUMN comprobante TEXT")
+    # 4) Normalizar enviado_matriz
+    # si hay valores raros, los bajamos a 0/1
+    cur.execute("""
+        UPDATE caja_movimientos
+        SET enviado_matriz =
+          CASE
+            WHEN enviado_matriz IN (1, '1', 'true', 'True', 'TRUE') THEN 1
+            ELSE 0
+          END
+        WHERE enviado_matriz IS NOT NULL
+    """)
+    cur.execute("""
+        UPDATE caja_movimientos
+        SET enviado_matriz = 0
+        WHERE enviado_matriz IS NULL
+    """)
 
-    if not column_exists(cur, tabla, "motivo"):
-        cur.execute(f"ALTER TABLE {tabla} ADD COLUMN motivo TEXT")
-
-    if not column_exists(cur, tabla, "fecha"):
-        cur.execute(f"ALTER TABLE {tabla} ADD COLUMN fecha TEXT NOT NULL DEFAULT (date('now'))")
+    # 5) Asegurar dia (si está vacío lo calculamos desde fecha)
+    cur.execute("""
+        UPDATE caja_movimientos
+        SET dia = date(fecha)
+        WHERE (dia IS NULL OR trim(dia)='') AND fecha IS NOT NULL AND trim(fecha)!=''
+    """)
 
     conn.commit()
+
+    # Mostrar id=1 después del fix
+    cur.execute("SELECT id, tipo_mov, metodo, enviado_matriz, dia, fecha FROM caja_movimientos WHERE id=1")
+    print("ID=1 (FIXED):", cur.fetchone())
+
     conn.close()
-    print(f"✅ Migración OK. Tabla usada: {tabla}")
+    print("✅ Caja reparada: valores normalizados y CHECK ya no debe fallar.")
 
 if __name__ == "__main__":
-    migrate_caja()
+    main()
+

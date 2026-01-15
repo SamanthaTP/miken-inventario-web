@@ -1,58 +1,145 @@
 {% extends "layout.html" %}
 {% block content %}
 
-<div class="card">
-  <h2 style="margin:0;">📊 Dashboard</h2>
-  <p class="muted" style="margin-top:6px;">Resumen rápido del inventario y caja.</p>
-
-  <div class="grid" style="margin-top:14px;">
-
-    <!-- Máquinas -->
-    <div class="card" style="padding:14px;">
-      <h3 style="margin:0 0 6px 0;">🧊 Máquinas</h3>
-      <div style="font-size:28px; font-weight:900;">{{ maquinas_total }}</div>
-      <a class="btn" href="{{ url_for('catalogo_maquinas') }}" style="margin-top:10px;">Ver catálogo</a>
+<div class="dash">
+  <div class="dash__title">
+    <h2 class="dash__h2">📊 Dashboard</h2>
+    <div class="dash__sub">
+      Último reporte: {{ ultimo_reporte }}
     </div>
-
-    <!-- Insumos -->
-    <div class="card" style="padding:14px;">
-      <h3 style="margin:0 0 6px 0;">📦 Insumos</h3>
-      <div style="font-size:28px; font-weight:900;">{{ insumos_total }}</div>
-      <a class="btn" href="{{ url_for('catalogo_insumos') }}" style="margin-top:10px;">Ver catálogo</a>
-    </div>
-
-    <!-- Activos -->
-    <div class="card" style="padding:14px;">
-      <h3 style="margin:0 0 6px 0;">✅ Activos</h3>
-      <div style="font-size:28px; font-weight:900;">{{ activos_total }}</div>
-      <span class="muted">Productos activos en sistema</span>
-    </div>
-
-    <!-- Stock bajo -->
-    <div class="card" style="padding:14px;">
-      <h3 style="margin:0 0 6px 0;">⚠ Stock bajo</h3>
-      <div style="font-size:28px; font-weight:900;">{{ stock_bajo_total }}</div>
-      <a class="btn" href="{{ url_for('stock_bajo') }}" style="margin-top:10px;">Ver alerta</a>
-    </div>
-
   </div>
 
-  <!-- Caja / Movimientos -->
-  <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
-    <a class="btn btn--primary" href="{{ url_for('caja_mov_nuevo') }}">➕ Registrar movimiento</a>
-    <a class="btn" href="{{ url_for('caja_movimientos_list') }}">📄 Historial de movimientos</a>
+  <!-- ===== TOP CARDS (como tu ejemplo) ===== -->
+  <div class="dash-cards">
+    <div class="dash-card dash-card--orange">
+      <div class="dash-card__icon">📦</div>
+      <div class="dash-card__label">Total Productos</div>
+      <div class="dash-card__value">{{ total_productos }}</div>
+    </div>
 
-    {% if caja_abierta == 1 %}
-      <span class="btn" style="cursor:default; background:#eafff3; border-color:#b7f0d0; color:#0f5132;">
-        🟢 Caja abierta hoy
-      </span>
-    {% else %}
-      <span class="btn" style="cursor:default; background:#fff3f3; border-color:#f3c2c2; color:#6b1111;">
-        🔴 Caja cerrada hoy
-      </span>
-    {% endif %}
+    <div class="dash-card dash-card--blue">
+      <div class="dash-card__icon">📦</div>
+      <div class="dash-card__label">Bajo Stock (Insumos)</div>
+      <div class="dash-card__value">{{ bajo_insumos }}</div>
+      <a class="dash-card__link" href="{{ url_for('stock_bajo') }}">⚠ Ver productos bajos</a>
+    </div>
+
+    <div class="dash-card dash-card--blue2">
+      <div class="dash-card__icon">🧰</div>
+      <div class="dash-card__label">Bajo Stock (Máquinas)</div>
+      <div class="dash-card__value">{{ bajo_maquinas }}</div>
+      <a class="dash-card__link" href="{{ url_for('stock_bajo') }}">⚠ Ver productos bajos</a>
+    </div>
+
+    <div class="dash-card dash-card--green">
+      <div class="dash-card__icon">💵</div>
+      <div class="dash-card__label">Caja Chica</div>
+      <div class="dash-card__value">${{ "{:,.2f}".format(saldo_caja) }}</div>
+      <div class="dash-card__mini">{{ "Caja abierta hoy" if caja_abierta==1 else "Caja cerrada hoy" }}</div>
+    </div>
+
+    <div class="dash-card dash-card--red">
+      <div class="dash-card__icon">🔔</div>
+      <div class="dash-card__label">Estado Operativo</div>
+      <div class="dash-card__mini">
+        {{ maquinas_revision }} máquina(s) en revisión
+      </div>
+    </div>
   </div>
 
+  <!-- ===== 3 PANELES ABAJO ===== -->
+  <div class="dash-panels">
+    <!-- EXISTENCIAS INSUMOS -->
+    <div class="dash-panel card">
+      <div class="dash-panel__head">
+        <h3 class="dash-panel__title">Existencias de Insumos</h3>
+        <a class="dash-panel__action" href="{{ url_for('catalogo_insumos') }}">Ver catálogo</a>
+      </div>
+
+      <div class="dash-list">
+        {% set current_cat = None %}
+        {% for p in insumos_rows %}
+          {% if p["categoria"] != current_cat %}
+            {% set current_cat = p["categoria"] %}
+            <div class="dash-list__cat">{{ current_cat if current_cat else "Sin categoría" }}</div>
+          {% endif %}
+
+          <div class="dash-list__row">
+            <div class="dash-list__name">
+              <span class="dash-dot"></span>
+              {{ p["nombre"] }}
+            </div>
+
+            <div class="dash-list__stock">
+              {{ p["stock_actual"] }}
+              {% if p["stock_actual"] <= p["stock_min"] %}
+                <span class="dash-badge">BAJO</span>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+
+        {% if insumos_rows|length == 0 %}
+          <div class="muted">No hay insumos registrados.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ESTADO OPERATIVO -->
+    <div class="dash-panel card">
+      <div class="dash-panel__head">
+        <h3 class="dash-panel__title">Estado Operativo</h3>
+      </div>
+
+      <div class="op">
+        <div class="op__left">
+          <div class="op__big">{{ maquinas_total }}</div>
+          <div class="op__label">Máquinas</div>
+
+          <div class="op__bullets">
+            <div class="op__bullet">
+              <span class="op__dot op__dot--ok"></span>
+              <strong>{{ maquinas_operativas }}</strong> Operativas
+            </div>
+            <div class="op__bullet">
+              <span class="op__dot op__dot--warn"></span>
+              <strong>{{ maquinas_revision }}</strong> En revisión
+            </div>
+          </div>
+        </div>
+
+        <div class="op__right">
+          <div class="ring" style="--p: {{ pct_operativas }};">
+            <div class="ring__center">
+              <div class="ring__pct">{{ pct_operativas }}%</div>
+              <div class="ring__sub">Operativas</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="op__hint muted">
+        * “En revisión” se calcula si la categoría de la máquina contiene la palabra “revision”.
+      </div>
+    </div>
+
+    <!-- INFORMES -->
+    <div class="dash-panel card">
+      <div class="dash-panel__head">
+        <h3 class="dash-panel__title">Informes</h3>
+      </div>
+
+      <div class="reports">
+        <a class="reports__btn" href="{{ url_for('reporte_ventas_csv') }}">⬇ Descargar reporte de ventas (CSV)</a>
+        <a class="reports__btn" href="{{ url_for('reporte_inventario_csv') }}">⬇ Descargar reporte de inventario (CSV)</a>
+      </div>
+
+      <div class="muted" style="margin-top:10px;">
+        * Ventas: se toma de Caja → ingresos cuyo motivo contenga “venta”.
+      </div>
+    </div>
+  </div>
 </div>
 
 {% endblock %}
+
