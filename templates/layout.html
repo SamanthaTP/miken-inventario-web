@@ -29,18 +29,22 @@
         <a class="nav__btn nav__btn--danger" href="{{ url_for('logout') }}">Salir</a>
       </nav>
 
-      <div class="userbox">
-        <button class="userbox__btn" type="button" onclick="toggleUserMenu()">
-          <span class="userbox__avatar">{{ (username[0] if username else 'A')|upper }}</span>
-          <span class="userbox__name">{{ username if username else 'admin' }}</span>
-          <span class="userbox__caret">▾</span>
-        </button>
+    <div class="userbox">
+      <button class="userbox__btn" type="button" onclick="toggleUserMenu(event)">
+        <span class="userbox__avatar">👤</span>
+        <span class="userbox__name">Admin</span>
+        <span class="userbox__caret">▾</span>
+      </button>
 
-        <div id="usermenu" class="userbox__menu">
-          <a href="{{ url_for('dashboard') }}">Mi panel</a>
-          <a href="{{ url_for('logout') }}">Cerrar sesión</a>
-        </div>
+
+      <div class="userbox__menu" id="userMenu">
+        <a href="{{ url_for('forgot_password') }}">🔑 Cambiar contraseña</a>
+        <a href="{{ url_for('logout') }}" class="userbox__menu--danger">
+          🚪 Cerrar sesión
+        </a>
       </div>
+    </div>
+
 
     </div>
   </header>
@@ -78,6 +82,20 @@
       if(!e.target.closest(".userbox")) m.classList.remove("open");
     });
   </script>
+
+  <script>
+  function toggleUserMenu(event) {
+    event.stopPropagation();
+    document.getElementById("userMenu").classList.toggle("open");
+  }
+
+  document.addEventListener("click", function () {
+    const menu = document.getElementById("userMenu");
+    if (menu) menu.classList.remove("open");
+  });
+  </script>
+
+
 </body>
 </html>
 

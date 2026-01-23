@@ -552,3 +552,132 @@ body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:var(--bg);c
   color:#0b2b32;
 }
 .reports__btn:hover{ background:#f3fbfd; }
+
+/* ===== User dropdown (topbar) ===== */
+.user-menu{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.user-menu__btn{
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,.35);
+  background: rgba(255,255,255,.18);
+  color: #fff;
+  border-radius: 14px;
+  padding: 9px 12px;
+  font-weight: 900;
+  display:flex;
+  align-items:center;
+  gap: 8px;
+}
+
+.user-menu__btn:hover{
+  background: rgba(255,255,255,.26);
+}
+
+.user-menu__name{
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu__dropdown{
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  min-width: 210px;
+  padding: 8px;
+  box-shadow: 0 18px 36px rgba(0,0,0,.16);
+  display: none;
+  z-index: 9999;
+}
+
+.user-menu__dropdown.is-open{
+  display: block;
+}
+
+.user-menu__item{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  padding: 10px 10px;
+  text-decoration:none;
+  color:#0b2b32;
+  font-weight: 850;
+  border-radius: 10px;
+}
+
+.user-menu__item:hover{
+  background:#f3fbfd;
+}
+
+.user-menu__danger{
+  color:#b91c1c;
+}
+
+.user-menu__sep{
+  height: 1px;
+  background: var(--border);
+  margin: 6px 4px;
+}
+
+/* Responsive: en pantallas pequeñas, oculta el nombre y deja solo el emoji */
+@media (max-width: 520px){
+  .user-menu__name{ display:none; }
+}
+
+.userbox__menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 48px;
+  min-width: 200px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 30px rgba(0,0,0,.14);
+  padding: 8px;
+  z-index: 1000;
+}
+
+.userbox__menu.open {
+  display: block;
+}
+
+.userbox__menu a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #0b2b32;
+  font-weight: 650;
+}
+
+.userbox__menu a:hover {
+  background: #f3fbfd;
+}
+
+.userbox__menu--danger {
+  color: #8b1d1d;
+}
+.userbox__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #1f5d75;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.15);
+}
+
+

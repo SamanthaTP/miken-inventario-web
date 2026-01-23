@@ -5,6 +5,11 @@ DB_NAME = "miken.db"
 conn = sqlite3.connect(DB_NAME)
 cur = conn.cursor()
 
+
+cur.execute("PRAGMA table_info(caja_movimientos)")
+cols = [r[1] for r in cur.fetchall()]
+print("Columnas caja_movimientos:", cols)
+
 print("TABLAS:")
 cur.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
 for (name,) in cur.fetchall():
@@ -21,5 +26,7 @@ else:
     for row in cur.fetchall():
         # row = (cid, name, type, notnull, dflt_value, pk)
         print(f" - {row[1]} ({row[2]}) default={row[4]}")
+
+
 
 conn.close()
