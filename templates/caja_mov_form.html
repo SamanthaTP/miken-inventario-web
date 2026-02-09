@@ -22,90 +22,563 @@
     </form>
 
   {% else %}
-    <h2 style="margin:0 0 6px 0;">➕ Registrar movimiento de caja</h2>
-    <p style="margin:0 0 14px; color:var(--muted); font-weight:650;">
-      Puede registrar efectivo o banco. En banco, use comprobante.
-    </p>
-
-    <form method="post">
-      <div class="grid">
-        <div>
-          <label style="font-weight:800;">Día (YYYY-MM-DD)</label>
-          <input name="dia" value="{{ dia }}" required
-                 style="width:100%; padding:10px; border-radius:12px; border:1px solid var(--border);">
-          <small style="color:var(--muted); font-weight:650;">Para registrar días anteriores.</small>
-        </div>
-
-        <div>
-          <label style="font-weight:800;">Fecha/hora (opcional)</label>
-          <input name="fecha_full" placeholder="2026-01-11 14:30:00"
-                 style="width:100%; padding:10px; border-radius:12px; border:1px solid var(--border);">
-          <small style="color:var(--muted); font-weight:650;">Si no se llena, toma la fecha actual.</small>
-        </div>
-
-        <div>
-          <label style="font-weight:800;">Tipo de movimiento</label>
-          <select name="tipo_mov" style="width:100%; padding:10px; border-radius:12px; border:1px solid var(--border);">
-            <option value="ingreso">Ingreso</option>
-            <option value="egreso">Egreso</option>
-          </select>
-        </div>
-
-        <div>
-          <label style="font-weight:800;">Método</label>
-          <select name="medio" id="metodo"
-                  style="width:100%; padding:10px; border-radius:12px; border:1px solid var(--border);"
-                  onchange="toggleReferencia()">
-            <option value="efectivo">Efectivo</option>
-            <option value="banco">Banco</option>
-          </select>
-        </div>
-
-        <div>
-          <label style="font-weight:800;">Monto</label>
-          <input name="monto" type="number" step="0.01" required
-                 style="width:100%; padding:10px; border-radius:12px; border:1px solid var(--border);">
-        </div>
-
-        <div>
-          <label style="font-weight:800;">Motivo</label>
-          <input name="motivo" type="text" placeholder="Ej: compra insumos / venta local"
-                 style="width:100%; padding:10px; border-radius:12px; border:1px solid var(--border);">
-        </div>
-
-        <div id="refBox" style="display:none;">
-          <label style="font-weight:800;">Comprobante / Referencia (banco)</label>
-          <input name="referencia" type="text" placeholder="Ej: TRF-12345"
-                 style="width:100%; padding:10px; border-radius:12px; border:1px solid var(--border);">
-        </div>
-
-        <div>
-          <label style="font-weight:800;">Enviar caja a matriz (Machala)</label>
-          <div style="margin-top:8px;">
-            <label style="font-weight:650;">
-              <input type="checkbox" name="enviado_matriz" value="1">
-              Marcar como enviado a matriz (efectivo)
-            </label>
+    <form method="post" class="mv-card" novalidate>
+      <div class="mv-header">
+        <div class="mv-title">
+          <span class="mv-icon">➕</span>
+          <div>
+            <h2>Registrar movimiento de caja</h2>
+            <p>Ingreso: puede registrar venta (con items) o ingreso simple. Egreso: gasto o envío a matriz.</p>
           </div>
-          <small style="color:var(--muted); font-weight:650;">Úselo cuando salga caja chica a matriz.</small>
         </div>
       </div>
 
-      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn btn--primary" type="submit">Guardar</button>
-        <a class="btn" href="{{ url_for('caja_home') }}">Volver</a>
-        <a class="btn" href="{{ url_for('caja_movimientos_list') }}">Ver historial</a>
+      <!-- SECCIÓN 1: Información -->
+      <section class="mv-section">
+        <h3 class="mv-section__title">Información del movimiento</h3>
+
+        <div class="mv-grid">
+          <div class="mv-field">
+            <label for="dia">Día <span class="req">*</span></label>
+            <input id="dia" name="dia" type="date" value="{{ dia }}" class="mv-input" required>
+            <small class="mv-help">Para registrar días anteriores.</small>
+          </div>
+
+          <div class="mv-field">
+            <label for="fecha_full">Fecha/hora <span class="opt">(opcional)</span></label>
+            <input id="fecha_full" name="fecha_full" type="datetime-local" class="mv-input">
+            <small class="mv-help">Si no se llena, toma la fecha actual.</small>
+          </div>
+
+          <div class="mv-field">
+            <label for="tipo_mov">Tipo de movimiento <span class="req">*</span></label>
+            <select id="tipo_mov" name="tipo_mov" class="mv-input" required>
+              <option value="ingreso">Ingreso</option>
+              <option value="egreso">Egreso</option>
+            </select>
+            <small class="mv-help">Ingreso suma a caja, egreso resta.</small>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECCIÓN 2: Venta (solo ingreso) -->
+      <section id="ventaBox" class="mv-section">
+        <div class="mv-section__head">
+          <h3 class="mv-section__title">Venta / Ingreso por productos</h3>
+          <div class="mv-section__tools">
+          
+          </div>
+        </div>
+
+        <div class="mv-grid">
+          <div class="mv-field mv-field--wide">
+            <label for="buscarProducto">Buscar producto (SKU o nombre)</label>
+            <div class="mv-search">
+              <input id="buscarProducto" type="text" class="mv-input"
+                     placeholder="Ej: TP10OZ o Tarrina 10oz..." autocomplete="off">
+              <button id="btnBuscar" class="mv-btn mv-btn--secondary" type="button">Buscar</button>
+            </div>
+            <small class="mv-help">Agrega uno o varios productos. El sistema descontará stock al guardar.</small>
+
+            <div id="resultBox" class="mv-results mv-hide"></div>
+          </div>
+
+          <div class="mv-field mv-field--wide">
+            <div class="mv-items-card">
+              <div class="mv-items-card__head">
+                <div class="mv-items-card__title">🧾 Items de la venta</div>
+                <div class="mv-items-card__hint">Ajusta cantidades y revisa stock.</div>
+              </div>
+
+              <div class="mv-items-wrap">
+                <table class="mv-items">
+                  <thead>
+                    <tr>
+                      <th style="width:38%;">Producto</th>
+                      <th style="width:16%;">SKU</th>
+                      <th style="width:12%;">Stock</th>
+                      <th style="width:14%;">Cantidad</th>
+                      <th style="width:14%;">Precio</th>
+                      <th style="width:12%;">Subtotal</th>
+                      <th style="width:6%;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="itemsTbody">
+                    <tr id="emptyRow">
+                      <td colspan="7" class="mv-empty">Aún no agregas productos.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="mv-totalbar">
+                <div class="mv-totalbar__left">
+                  <label class="mv-check">
+                    <input id="usarTotalAuto" type="checkbox" checked>
+                    <span>Calcular monto automáticamente (por subtotales)</span>
+                  </label>
+                </div>
+                <div class="mv-totalbar__right">
+                  <div class="mv-total">
+                    <span>Total</span>
+                    <b id="totalAuto">$0.00</b>
+                  </div>
+                </div>
+              </div>
+
+              <small class="mv-help">
+                Si no usas cálculo automático, escribe el monto manual abajo (sirve para “Ingreso simple”).
+              </small>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECCIÓN 3: Detalle financiero -->
+      <section class="mv-section">
+        <h3 class="mv-section__title">Detalle financiero</h3>
+
+        <div class="mv-grid">
+          <div class="mv-field">
+            <label for="metodo">Método <span class="req">*</span></label>
+
+            <!-- ✅ Nuevo: usamos name="metodo" (tu app.py lo lee). -->
+            <select name="metodo" id="metodo" class="mv-input" required>
+              <option value="efectivo">Efectivo</option>
+              <option value="banco">Banco</option>
+            </select>
+
+            <!-- ✅ Compat opcional: si en alguna parte vieja tu app aún lee "medio", lo enviamos duplicado -->
+            <input type="hidden" name="medio" id="medioShadow" value="efectivo">
+
+            <small class="mv-help">En banco se recomienda comprobante.</small>
+          </div>
+
+          <div class="mv-field">
+            <label for="monto">Monto <span class="req">*</span></label>
+            <div class="mv-money">
+              <span class="mv-money__prefix">$</span>
+              <input id="monto" name="monto" type="number" class="mv-input mv-input--money"
+                     min="0" step="0.01" placeholder="0.00" required>
+            </div>
+            <small class="mv-help">Si hay items y el cálculo auto está activo, se rellena solo.</small>
+          </div>
+
+          <div class="mv-field mv-field--wide">
+            <label for="motivo">Motivo <span class="opt">(recomendado)</span></label>
+            <textarea id="motivo" name="motivo" class="mv-input" rows="2"
+                      placeholder="Ej: venta local / compra insumos / envío Machala"></textarea>
+            <small class="mv-help">Descripción corta para el historial.</small>
+          </div>
+
+          <!-- Solo cuando método = banco -->
+          <div id="refBox" class="mv-field mv-field--wide mv-hide">
+            <div class="mv-bank-card">
+              <div class="mv-bank-card__title">🏦 Comprobante / Referencia (banco)</div>
+
+              <div class="mv-grid mv-grid--2">
+                <div class="mv-field">
+                  <label for="referencia">Referencia <span class="req">*</span></label>
+                  <input id="referencia" name="referencia" type="text" class="mv-input"
+                         placeholder="Ej: TRF-12345">
+                  <small class="mv-help">Obligatorio si el método es banco.</small>
+                </div>
+
+                <div class="mv-field">
+                  <label>Banco (opcional)</label>
+                  <input type="text" class="mv-input" placeholder="Ej: Pichincha / Produbanco">
+                  <small class="mv-help">Visual (si luego quieres guardarlo, lo conecto).</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- SECCIÓN 4: Egreso / Envío -->
+      <section id="egresoBox" class="mv-section">
+        <h3 class="mv-section__title">Egreso / Destino</h3>
+
+        <div class="mv-grid mv-grid--2">
+          <label class="mv-transfer mv-transfer--small">
+            <input type="checkbox" name="enviado_matriz" id="enviado_matriz" value="1">
+            <div class="mv-transfer__content">
+              <div class="mv-transfer__title">📦 Enviar a matriz (Machala)</div>
+              <div class="mv-transfer__desc">Úselo cuando salga caja chica a matriz.</div>
+            </div>
+          </label>
+
+          <div class="mv-field">
+            <label for="destino_otro">Otro (motivo de egreso)</label>
+            <input id="destino_otro" name="destino_otro" type="text" class="mv-input"
+                   placeholder="Ej: transporte / mantenimiento / servicios">
+            <small class="mv-help">Si no es Machala, escribe aquí el motivo principal.</small>
+          </div>
+        </div>
+      </section>
+
+      <!-- Acciones -->
+      <div class="mv-actions mv-actions--big">
+        <button class="mv-btn mv-btn--primary mv-btn--lg" type="submit">Guardar</button>
+        <a class="mv-btn mv-btn--secondary mv-btn--lg" href="{{ url_for('caja_movimientos_list') }}">Ver historial</a>
+        <a class="mv-btn mv-btn--ghost mv-btn--lg" href="{{ url_for('caja_home') }}">Volver</a>
       </div>
     </form>
 
     <script>
-      function toggleReferencia(){
-        const metodo = document.getElementById('metodo').value;
-        const box = document.getElementById('refBox');
-        box.style.display = (metodo === 'banco') ? 'block' : 'none';
-      }
-      toggleReferencia();
+      (function () {
+        // ---------- refs ----------
+        const tipo = document.getElementById('tipo_mov');
+        const metodo = document.getElementById('metodo');
+        const medioShadow = document.getElementById('medioShadow');
+
+        const refBox = document.getElementById('refBox');
+        const referencia = document.getElementById('referencia');
+
+        const ventaBox = document.getElementById('ventaBox');
+        const egresoBox = document.getElementById('egresoBox');
+
+        const buscar = document.getElementById('buscarProducto');
+        const btnBuscar = document.getElementById('btnBuscar');
+        const resultBox = document.getElementById('resultBox');
+
+        const itemsTbody = document.getElementById('itemsTbody');
+        const emptyRow = document.getElementById('emptyRow');
+
+        const montoInput = document.getElementById('monto');
+        const usarTotalAuto = document.getElementById('usarTotalAuto');
+        const totalAuto = document.getElementById('totalAuto');
+
+        const enviadoMatriz = document.getElementById('enviado_matriz');
+        const destinoOtro = document.getElementById('destino_otro');
+
+        // ---------- helpers ----------
+        function money(n){
+          n = Number(n || 0);
+          return "$" + n.toFixed(2);
+        }
+
+        function applyMetodo(){
+          const isBanco = (metodo.value === 'banco');
+          refBox.classList.toggle('mv-hide', !isBanco);
+          referencia.required = isBanco;
+
+          // compat: duplicamos el valor en "medio"
+          medioShadow.value = metodo.value;
+
+          if (!isBanco) referencia.value = '';
+        }
+
+        function applyTipo(){
+          tipo.classList.remove('ingreso','egreso');
+          tipo.classList.add(tipo.value);
+
+          const isIngreso = (tipo.value === 'ingreso');
+          ventaBox.style.display = isIngreso ? '' : 'none';
+          egresoBox.style.display = isIngreso ? 'none' : '';
+
+          // Si es ingreso, enviamos enviado_matriz off y destino otro vacío
+          if (isIngreso) {
+            enviadoMatriz.checked = false;
+            destinoOtro.value = '';
+          }
+        }
+
+        // Items in-memory: {id, sku, nombre, stock, precio, qty}
+        const items = new Map();
+
+        function renderItems(){
+          // limpiar
+          itemsTbody.innerHTML = '';
+
+          if (items.size === 0) {
+            itemsTbody.appendChild(emptyRow);
+            computeTotal();
+            return;
+          }
+
+          items.forEach((it) => {
+            const tr = document.createElement('tr');
+
+            // producto (texto)
+            const tdProd = document.createElement('td');
+            tdProd.innerHTML = `
+              <div class="mv-prod">
+                <div class="mv-prod__name">${escapeHtml(it.nombre)}</div>
+                <div class="mv-prod__meta">${escapeHtml(it.categoria || '')}</div>
+              </div>
+            `;
+            tr.appendChild(tdProd);
+
+            // sku
+            const tdSku = document.createElement('td');
+            tdSku.textContent = it.sku || '';
+            tr.appendChild(tdSku);
+
+            // stock
+            const tdStock = document.createElement('td');
+            tdStock.innerHTML = `<span class="mv-pill ${Number(it.stock) <= 0 ? 'mv-pill--danger' : ''}">${Number(it.stock || 0)}</span>`;
+            tr.appendChild(tdStock);
+
+            // cantidad
+            const tdQty = document.createElement('td');
+            tdQty.innerHTML = `
+              <input type="number" class="mv-input mv-input--qty" min="0" step="1" value="${Number(it.qty || 1)}">
+              <input type="hidden" name="producto_id[]" value="${it.id}">
+              <input type="hidden" name="cantidad_item[]" value="${Number(it.qty || 1)}">
+            `;
+            tr.appendChild(tdQty);
+
+            // precio
+            const tdPrecio = document.createElement('td');
+            tdPrecio.innerHTML = `
+              <input type="number" class="mv-input mv-input--price" min="0" step="0.01" value="${Number(it.precio || 0)}">
+            `;
+            tr.appendChild(tdPrecio);
+
+            // subtotal
+            const tdSub = document.createElement('td');
+            const sub = Number(it.qty || 0) * Number(it.precio || 0);
+            tdSub.innerHTML = `<b class="mv-sub">${money(sub)}</b>`;
+            tr.appendChild(tdSub);
+
+            // remove
+            const tdRm = document.createElement('td');
+            tdRm.innerHTML = `<button class="mv-x" type="button" title="Quitar">✕</button>`;
+            tr.appendChild(tdRm);
+
+            // listeners
+            const qtyInput = tdQty.querySelector('.mv-input--qty');
+            const qtyHidden = tdQty.querySelectorAll('input[type="hidden"]')[1];
+            const priceInput = tdPrecio.querySelector('.mv-input--price');
+            const btnX = tdRm.querySelector('.mv-x');
+
+            qtyInput.addEventListener('input', () => {
+              let q = parseInt(qtyInput.value || '0', 10);
+              if (Number.isNaN(q) || q < 0) q = 0;
+              it.qty = q;
+              qtyHidden.value = q;
+              renderItems();
+            });
+
+            priceInput.addEventListener('input', () => {
+              let p = Number((priceInput.value || '0').replace(',', '.'));
+              if (Number.isNaN(p) || p < 0) p = 0;
+              it.precio = p;
+              renderItems();
+            });
+
+            btnX.addEventListener('click', () => {
+              items.delete(String(it.id));
+              renderItems();
+            });
+
+            // advertencia stock
+            if (Number(it.qty) > Number(it.stock)) {
+              tr.classList.add('mv-row-warn');
+            }
+
+            itemsTbody.appendChild(tr);
+          });
+
+          computeTotal();
+        }
+
+        function computeTotal(){
+          let total = 0;
+          items.forEach(it => {
+            total += Number(it.qty || 0) * Number(it.precio || 0);
+          });
+          totalAuto.textContent = money(total);
+
+          if (usarTotalAuto.checked) {
+            montoInput.value = total.toFixed(2);
+          }
+        }
+
+        function escapeHtml(str){
+          str = String(str ?? '');
+          return str.replace(/[&<>"']/g, function(m){
+            return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]);
+          });
+        }
+
+        async function buscarProductos(){
+          const q = (buscar.value || '').trim();
+          if (!q) {
+            resultBox.classList.add('mv-hide');
+            resultBox.innerHTML = '';
+            return;
+          }
+
+          try {
+            const res = await fetch(`/api/productos/buscar?q=${encodeURIComponent(q)}`, {
+              headers: { 'Accept': 'application/json' }
+            });
+            if (!res.ok) throw new Error('No se pudo buscar productos');
+            const data = await res.json();
+
+            if (!Array.isArray(data) || data.length === 0) {
+              resultBox.innerHTML = `<div class="mv-result-empty">Sin resultados.</div>`;
+              resultBox.classList.remove('mv-hide');
+              return;
+            }
+
+            resultBox.innerHTML = data.map(p => {
+              const low = (Number(p.stock_actual) <= Number(p.stock_min)) ? 'mv-chip--warn' : '';
+              return `
+                <button type="button" class="mv-result">
+                  <div class="mv-result__main">
+                    <div class="mv-result__name">${escapeHtml(p.nombre)}</div>
+                    <div class="mv-result__meta">
+                      <span class="mv-chip">${escapeHtml(p.sku || 'SIN SKU')}</span>
+                      <span class="mv-chip ${low}">Stock: ${Number(p.stock_actual || 0)}</span>
+                      <span class="mv-chip mv-chip--soft">${escapeHtml(p.tipo || '')}</span>
+                    </div>
+                  </div>
+                  <div class="mv-result__price">${money(Number(p.precio || 0))}</div>
+                  <span class="mv-add">Agregar</span>
+                  <span class="mv-payload mv-hide"
+                        data-id="${p.id}"
+                        data-sku="${escapeHtml(p.sku || '')}"
+                        data-nombre="${escapeHtml(p.nombre || '')}"
+                        data-stock="${Number(p.stock_actual || 0)}"
+                        data-precio="${Number(p.precio || 0)}"
+                        data-categoria="${escapeHtml(p.categoria || '')}"></span>
+                </button>
+              `;
+            }).join('');
+
+            resultBox.classList.remove('mv-hide');
+
+            // bind results
+            [...resultBox.querySelectorAll('.mv-result')].forEach(btn => {
+              btn.addEventListener('click', () => {
+                const payload = btn.querySelector('.mv-payload');
+                const id = payload.dataset.id;
+                const it = {
+                  id: Number(id),
+                  sku: payload.dataset.sku || '',
+                  nombre: payload.dataset.nombre || '',
+                  categoria: payload.dataset.categoria || '',
+                  stock: Number(payload.dataset.stock || 0),
+                  precio: Number(payload.dataset.precio || 0),
+                  qty: 1
+                };
+
+                const key = String(it.id);
+                if (items.has(key)) {
+                  // si ya existe, suma 1
+                  const prev = items.get(key);
+                  prev.qty = Number(prev.qty || 0) + 1;
+                  items.set(key, prev);
+                } else {
+                  items.set(key, it);
+                }
+
+                renderItems();
+                buscar.value = '';
+                resultBox.classList.add('mv-hide');
+                resultBox.innerHTML = '';
+                buscar.focus();
+              });
+            });
+
+          } catch (e) {
+            resultBox.innerHTML = `<div class="mv-result-empty">Error al buscar. Intenta otra vez.</div>`;
+            resultBox.classList.remove('mv-hide');
+          }
+        }
+
+        // ---------- listeners ----------
+        metodo.addEventListener('change', applyMetodo);
+        tipo.addEventListener('change', applyTipo);
+
+        usarTotalAuto.addEventListener('change', () => {
+          computeTotal();
+        });
+
+        btnBuscar.addEventListener('click', buscarProductos);
+        buscar.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            buscarProductos();
+          }
+        });
+
+        // Cierra resultados al hacer click fuera
+        document.addEventListener('click', (ev) => {
+          if (!resultBox.contains(ev.target) && ev.target !== buscar && ev.target !== btnBuscar) {
+            resultBox.classList.add('mv-hide');
+          }
+        });
+
+        // ---------- init ----------
+        applyMetodo();
+        applyTipo();
+        renderItems();
+      })();
     </script>
+
+    <style>
+      /* ---------- mejoras UI sin tocar tu CSS global ---------- */
+      .mv-section__head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+      .mv-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,.04);border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-weight:800;color:var(--muted)}
+      .mv-search{display:flex;gap:10px;align-items:center}
+      .mv-search .mv-input{flex:1}
+      .mv-results{margin-top:10px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:#fff}
+      .mv-result{width:100%;display:flex;align-items:center;gap:12px;border:none;border-bottom:1px solid var(--border);background:#fff;padding:12px 12px;text-align:left;cursor:pointer}
+      .mv-result:last-child{border-bottom:none}
+      .mv-result:hover{background:rgba(0,0,0,.02)}
+      .mv-result__main{flex:1}
+      .mv-result__name{font-weight:900}
+      .mv-result__meta{margin-top:6px;display:flex;gap:8px;flex-wrap:wrap}
+      .mv-chip{font-size:12px;font-weight:900;border:1px solid var(--border);border-radius:999px;padding:4px 8px;background:rgba(0,0,0,.02)}
+      .mv-chip--warn{border-color:rgba(255,140,0,.35);background:rgba(255,140,0,.10)}
+      .mv-chip--soft{background:rgba(31,93,117,.08);border-color:rgba(31,93,117,.25)}
+      .mv-result__price{font-weight:1000;min-width:90px;text-align:right}
+      .mv-add{font-weight:1000;color:var(--primary);margin-left:auto}
+      .mv-result-empty{padding:12px;color:var(--muted);font-weight:800}
+
+      .mv-items-card{border:1px solid var(--border);border-radius:16px;padding:12px;background:#fff}
+      .mv-items-card__head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:10px}
+      .mv-items-card__title{font-weight:1000}
+      .mv-items-card__hint{color:var(--muted);font-weight:800;font-size:13px}
+
+      .mv-items-wrap{overflow:auto;border:1px solid var(--border);border-radius:14px}
+      table.mv-items{width:100%;border-collapse:collapse;min-width:820px;background:#fff}
+      .mv-items th,.mv-items td{padding:10px;border-bottom:1px solid var(--border);vertical-align:middle}
+      .mv-items th{background:rgba(0,0,0,.02);font-weight:1000}
+      .mv-empty{padding:18px;text-align:center;color:var(--muted);font-weight:900}
+
+      .mv-prod__name{font-weight:1000}
+      .mv-prod__meta{font-size:12px;color:var(--muted);font-weight:800;margin-top:4px}
+      .mv-pill{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-weight:1000}
+      .mv-pill--danger{border-color:rgba(255,0,0,.35);background:rgba(255,0,0,.08)}
+
+      .mv-input--qty{max-width:120px}
+      .mv-input--price{max-width:140px}
+      .mv-sub{font-weight:1100}
+
+      .mv-x{border:1px solid var(--border);background:#fff;border-radius:12px;padding:8px 10px;cursor:pointer;font-weight:1000}
+      .mv-x:hover{background:rgba(0,0,0,.03)}
+
+      .mv-row-warn{background:rgba(255,140,0,.06)}
+      .mv-totalbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
+      .mv-check{display:flex;align-items:center;gap:10px;font-weight:900;color:var(--muted)}
+      .mv-check input{transform:scale(1.1)}
+      .mv-total{display:flex;align-items:baseline;gap:12px}
+      .mv-total b{font-size:18px}
+
+      .mv-actions--big{gap:12px}
+      .mv-btn--lg{padding:14px 16px;border-radius:14px;font-weight:1000}
+      @media (max-width: 720px){
+        table.mv-items{min-width:760px}
+        .mv-search{flex-direction:column;align-items:stretch}
+        .mv-btn--lg{width:100%}
+      }
+    </style>
   {% endif %}
 </div>
 
