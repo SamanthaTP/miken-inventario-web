@@ -39,106 +39,142 @@
     </div>
 
     <div class="dash-card dash-card--red">
-      <div class="dash-card__icon">🔔</div>
-      <div class="dash-card__label">Estado Operativo</div>
-      <div class="dash-card__mini">
-        {{ maquinas_revision }} máquina(s) en revisión
+      <div class="dash-card__icon">💵</div>
+      <div class="dash-card__label">Ventas de hoy</div>
+
+      <div class="dash-card__value">
+        ${{ '%.2f'|format(ventas_hoy_total) }}
       </div>
+
+      <div class="dash-card__mini">
+        {{ ventas_hoy_n }} venta(s) registradas
+      </div>
+
+      <a class="dash-card__link" href="{{ url_for('venta_nueva') }}">
+        ➕ Registrar venta
+      </a>
     </div>
+
+
+  
   </div>
 
   <!-- ===== 3 PANELES ABAJO ===== -->
-  <div class="dash-panels">
-    <!-- EXISTENCIAS INSUMOS -->
-    <div class="dash-panel card">
+  <div class="dash-panels2">
+    <!-- PANEL IZQ: Existencias -->
+    <div class="card dash-panel">
       <div class="dash-panel__head">
         <h3 class="dash-panel__title">Existencias de Insumos</h3>
         <a class="dash-panel__action" href="{{ url_for('catalogo_insumos') }}">Ver catálogo</a>
       </div>
 
       <div class="dash-list">
-        {% set current_cat = None %}
-        {% for p in insumos_rows %}
-          {% if p["categoria"] != current_cat %}
-            {% set current_cat = p["categoria"] %}
-            <div class="dash-list__cat">{{ current_cat if current_cat else "Sin categoría" }}</div>
-          {% endif %}
-
+        {% for r in insumos_rows %}
           <div class="dash-list__row">
             <div class="dash-list__name">
               <span class="dash-dot"></span>
-              {{ p["nombre"] }}
+              <div>
+                <div style="font-weight:900;">{{ r["nombre"] }}</div>
+                <div style="color:var(--muted); font-weight:650; font-size:13px;">
+                  {{ r["categoria"] or "" }}
+                </div>
+              </div>
             </div>
 
             <div class="dash-list__stock">
-              {{ p["stock_actual"] }}
-              {% if p["stock_actual"] <= p["stock_min"] %}
+              <span class="pill">{{ r["stock_actual"] }}</span>
+              {% if r["stock_actual"] <= r["stock_min"] %}
                 <span class="dash-badge">BAJO</span>
               {% endif %}
             </div>
           </div>
         {% endfor %}
-
-        {% if insumos_rows|length == 0 %}
-          <div class="muted">No hay insumos registrados.</div>
-        {% endif %}
       </div>
     </div>
 
-    <!-- ESTADO OPERATIVO -->
-    <div class="dash-panel card">
+    <!-- ✅ PANEL DER: Semana (reemplaza Estado Operativo) -->
+    <div class="card dash-panel">
       <div class="dash-panel__head">
-        <h3 class="dash-panel__title">Estado Operativo</h3>
+        <h3 class="dash-panel__title">Ventas de la semana</h3>
+        <div class="wk-range">{{ week_start }} → {{ week_end }}</div>
       </div>
 
-      <div class="op">
-        <div class="op__left">
-          <div class="op__big">{{ maquinas_total }}</div>
-          <div class="op__label">Máquinas</div>
-
-          <div class="op__bullets">
-            <div class="op__bullet">
-              <span class="op__dot op__dot--ok"></span>
-              <strong>{{ maquinas_operativas }}</strong> Operativas
-            </div>
-            <div class="op__bullet">
-              <span class="op__dot op__dot--warn"></span>
-              <strong>{{ maquinas_revision }}</strong> En revisión
-            </div>
-          </div>
+      <div class="wk-top">
+        <div class="wk-top__box">
+          <div class="wk-top__label">Insumo más vendido</div>
+          {% if top_insumo %}
+            <div class="wk-top__name">{{ top_insumo["nombre"] }}</div>
+            <div class="wk-top__meta">SKU: {{ top_insumo["sku"] or "-" }} · Cant: {{ top_insumo["qty"] }}</div>
+          {% else %}
+            <div class="wk-top__name">—</div>
+            <div class="wk-top__meta">Sin ventas por productos esta semana</div>
+          {% endif %}
         </div>
 
-        <div class="op__right">
-          <div class="ring" style="--p: {{ pct_operativas }};">
-            <div class="ring__center">
-              <div class="ring__pct">{{ pct_operativas }}%</div>
-              <div class="ring__sub">Operativas</div>
-            </div>
-          </div>
+        <div class="wk-top__box">
+          <div class="wk-top__label">Máquina más vendida</div>
+          {% if top_maquina %}
+            <div class="wk-top__name">{{ top_maquina["nombre"] }}</div>
+            <div class="wk-top__meta">SKU: {{ top_maquina["sku"] or "-" }} · Cant: {{ top_maquina["qty"] }}</div>
+          {% else %}
+            <div class="wk-top__name">—</div>
+            <div class="wk-top__meta">Sin ventas por productos esta semana</div>
+          {% endif %}
         </div>
       </div>
 
-      <div class="op__hint muted">
-        * “En revisión” se calcula si la categoría de la máquina contiene la palabra “revision”.
+      <div class="wk-trend">
+        <div>
+          <div class="wk-total">${{ "%.2f"|format(week_total) }}</div>
+          <div class="wk-sub">
+            {% if trend == 'up' %}
+              <span class="trend up">▲ +{{ trend_pct }}%</span>
+            {% elif trend == 'down' %}
+              <span class="trend down">▼ {{ trend_pct }}%</span>
+            {% else %}
+              <span class="trend flat">— 0%</span>
+            {% endif %}
+            vs semana anterior
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- INFORMES -->
-    <div class="dash-panel card">
-      <div class="dash-panel__head">
-        <h3 class="dash-panel__title">Informes</h3>
-      </div>
+      <!-- Gráfico de barras (Lun-Sáb) -->
+      {% set maxv = 0 %}
+      {% for d in week_days %}
+        {% if d.total > maxv %}{% set maxv = d.total %}{% endif %}
+      {% endfor %}
+      {% if maxv == 0 %}{% set maxv = 1 %}{% endif %}
 
-      <div class="reports">
-        <a class="reports__btn" href="{{ url_for('reporte_ventas_csv') }}">⬇ Descargar reporte de ventas (CSV)</a>
-        <a class="reports__btn" href="{{ url_for('reporte_inventario_csv') }}">⬇ Descargar reporte de inventario (CSV)</a>
-      </div>
-
-      <div class="muted" style="margin-top:10px;">
-        * Ventas: se toma de Caja → ingresos cuyo motivo contenga “venta”.
+      <div class="wk-chart">
+        {% for d in week_days %}
+          {% set h = (d.total / maxv) * 100 %}
+          <div class="wk-bar">
+            <div class="wk-bar__col" style="height: {{ h }}%"></div>
+            <div class="wk-bar__label">{{ d.label }}</div>
+            <div class="wk-bar__val">${{ "%.0f"|format(d.total) }}</div>
+          </div>
+        {% endfor %}
       </div>
     </div>
   </div>
+
+  <!-- ✅ INFORMES ABAJO (full width) -->
+  <div class="card dash-panel dash-panel--reports">
+    <div class="dash-panel__head">
+      <h3 class="dash-panel__title">Informes</h3>
+    </div>
+
+    <div class="reports reports--row">
+      <a class="reports__btn" href="{{ url_for('reporte_ventas_csv') }}">⬇ Descargar informe de ventas (CSV)</a>
+      <a class="reports__btn" href="{{ url_for('reporte_inventario_csv') }}">⬇ Descargar informe de inventario (CSV)</a>
+    </div>
+
+    <p class="muted" style="margin:10px 0 0;">
+      * Ventas: se toma de Caja → ingresos cuyo motivo contiene “venta”.
+    </p>
+    </div>
+
 </div>
 
 {% endblock %}

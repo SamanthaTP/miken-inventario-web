@@ -5,7 +5,7 @@ from functools import wraps
 from werkzeug.utils import secure_filename
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, session, flash, make_response
+    url_for, session, flash, make_response, jsonify
 )
 
 CATEGORIAS_MAQUINAS = [
@@ -25,18 +25,17 @@ app.secret_key = "miken_prototipo_secret"
 
 DB_NAME = "miken.db"
 
-
 UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 ALLOWED_EXTS = {"png", "jpg", "jpeg", "webp"}
-
 
 # --------------------
 # UTILIDADES
 # --------------------
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTS
+
 
 def db_conn():
     conn = sqlite3.connect(
@@ -50,7 +49,6 @@ def db_conn():
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA busy_timeout=30000;")
-
     return conn
 
 
@@ -88,6 +86,98 @@ def parse_date_yyyy_mm_dd(s: str, fallback: str):
         return fallback
 
 
+def parse_datetime_input(s: str, fallback: str):
+    """
+    Acepta:
+      - '' => fallback
+      - 'YYYY-MM-DD' => agrega 00:00:00
+      - 'YYYY-MM-DD HH:MM:SS' => ok
+      - 'YYYY-MM-DD HH:MM' => agrega :00
+    """
+    s = (s or "").strip()
+    if not s:
+        return fallback
+
+    if len(s) == 10:
+        return s + " 00:00:00"
+    if len(s) == 16:
+        return s + ":00"
+    return s
+
+
+def table_info(cur, table: str):
+    cur.execute(f"PRAGMA table_info({table})")
+    return [r[1] for r in cur.fetchall()]
+
+
+def table_has_column(cur, table: str, column: str) -> bool:
+    cols = table_info(cur, table)
+    return column in cols
+
+
+def table_exists(cur, table: str) -> bool:
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+    return cur.fetchone() is not None
+
+
+def caja_col_medio(cur) -> str:
+    # Tu BD puede tener 'medio' o 'metodo'. En tu db.py actual (el que debes usar) existen ambos,
+    # pero dejamos esto por compatibilidad.
+    if table_has_column(cur, "caja_movimientos", "medio"):
+        return "medio"
+    return "metodo"
+
+
+def caja_col_fecha(cur) -> str:
+    # Preferimos fecha_full (si existe) y si no, fecha.
+    if table_has_column(cur, "caja_movimientos", "fecha_full"):
+        return "fecha_full"
+    return "fecha"
+
+
+def caja_fecha_expr(cur) -> str:
+    # Para filtrar correctamente por fecha, usamos COALESCE(fecha_full, fecha) si existe.
+    has_ff = table_has_column(cur, "caja_movimientos", "fecha_full")
+    if has_ff:
+        return "COALESCE(fecha_full, fecha)"
+    return "fecha"
+
+
+def insert_caja_movimiento(cur, data: dict) -> int:
+    """
+    Inserta movimiento en caja_movimientos de forma robusta según columnas existentes.
+    Retorna el id del movimiento insertado.
+    """
+    cols = table_info(cur, "caja_movimientos")
+
+    # Campos que queremos insertar (si existen)
+    desired = {
+        "fecha": data.get("fecha"),
+        "fecha_full": data.get("fecha_full"),
+        "dia": data.get("dia"),
+        "monto": data.get("monto", 0),
+        "motivo": data.get("motivo"),
+        "referencia": data.get("referencia"),
+        "tipo_mov": data.get("tipo_mov", "ingreso"),
+        "metodo": data.get("metodo", "efectivo"),
+        "medio": data.get("metodo", "efectivo"),  # compat
+        "enviado_matriz": data.get("enviado_matriz", 0),
+        "destino_otro": data.get("destino_otro"),
+        "comprobante": data.get("comprobante"),
+        "banco_nombre": data.get("banco_nombre"),
+        "tipo": data.get("tipo_mov", "ingreso"),  # compat
+    }
+
+    insert_cols = [c for c in desired.keys() if c in cols and desired[c] is not None]
+    if not insert_cols:
+        raise RuntimeError("No hay columnas compatibles para insertar en caja_movimientos.")
+
+    placeholders = ",".join(["?"] * len(insert_cols))
+    sql = f"INSERT INTO caja_movimientos ({','.join(insert_cols)}) VALUES ({placeholders})"
+    cur.execute(sql, tuple(desired[c] for c in insert_cols))
+    return int(cur.lastrowid)
+
+
 # --------------------
 # LOGIN / LOGOUT (DEMO)
 # --------------------
@@ -123,17 +213,6 @@ def login():
     return render_template("login.html", hide_nav=True, page_class="page-login", title="MIKEN - Iniciar sesión")
 
 
-
-
-@app.after_request
-def no_cache(response):
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    response.headers["Vary"] = "Cookie"
-    return response
-
-
 @app.route("/logout")
 def logout():
     session.clear()
@@ -145,22 +224,21 @@ def logout():
     return resp
 
 
-
 # --------------------
 # DASHBOARD (Sprint 4 UI)
 # --------------------
 @app.route("/dashboard")
 @login_required
 def dashboard():
+    dia = today_str()
+
     conn = db_conn()
     cur = conn.cursor()
 
     # ====== KPIs TOP ======
-    # Total productos activos (insumos + maquinas)
     cur.execute("SELECT COUNT(*) AS c FROM productos WHERE activo=1")
     total_productos = cur.fetchone()["c"]
 
-    # Bajo stock por tipo
     cur.execute("""
         SELECT COUNT(*) AS c
         FROM productos
@@ -175,13 +253,11 @@ def dashboard():
     """)
     bajo_maquinas = cur.fetchone()["c"]
 
-    # ====== Caja chica (solo visual en dashboard) ======
-    dia = today_str()
+    # ====== Caja chica (visual) ======
     cur.execute("SELECT * FROM caja_estado WHERE dia=?", (dia,))
     caja_estado = cur.fetchone()
     caja_abierta = 1 if (caja_estado and int(caja_estado["abierta"]) == 1) else 0
 
-    # saldo efectivo estimado hoy (si caja existe)
     efectivo_inicial = float(caja_estado["efectivo_inicial"]) if caja_estado else 0.0
     cur.execute("""
         SELECT
@@ -193,8 +269,21 @@ def dashboard():
     t = cur.fetchone()
     saldo_caja = efectivo_inicial + float(t["ing"]) - float(t["egr"])
 
-    # ====== Existencias Insumos (tabla tipo app) ======
-    # Traemos insumos ordenados por categoria/nombre (máx 30 para el panel)
+    # ====== Ventas de hoy (por caja_movimientos) ======
+    cur.execute("""
+        SELECT
+            COALESCE(SUM(monto), 0) AS total,
+            COUNT(*) AS n
+        FROM caja_movimientos
+        WHERE dia = ?
+          AND tipo_mov = 'ingreso'
+          AND LOWER(COALESCE(motivo,'')) LIKE '%venta%'
+    """, (dia,))
+    v = cur.fetchone()
+    ventas_hoy_total = float(v["total"])
+    ventas_hoy_n = int(v["n"])
+
+    # ====== EXISTENCIAS INSUMOS (panel) ======
     cur.execute("""
         SELECT id, sku, nombre, categoria, stock_actual, stock_min
         FROM productos
@@ -206,86 +295,158 @@ def dashboard():
     """)
     insumos_rows = cur.fetchall()
 
-    # ====== Estado operativo (SIN cliente) ======
-    # Como aún no tienes tabla/columna de estado real, lo haremos así:
-    # - Total máquinas = tipo='maquina' activas
-    # - En revisión = maquinas cuya categoria contiene 'revision' (puedes usar "En revisión", "Revision", etc.)
-    # - Operativas = total - en revisión
+    # =========================================================
+    # ✅ NUEVO: Ventas SEMANALES (Lunes a Sábado) + Top vendidos
+    # =========================================================
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())     # Lunes
+    week_end = week_start + timedelta(days=5)               # Sábado
+
+    week_start_s = week_start.isoformat()
+    week_end_s = week_end.isoformat()
+
+    # Ventas por día (caja_movimientos)
     cur.execute("""
-        SELECT COUNT(*) AS c
-        FROM productos
-        WHERE activo=1 AND tipo='maquina'
-    """)
-    maquinas_total = cur.fetchone()["c"]
+        SELECT dia, COALESCE(SUM(monto),0) AS total
+        FROM caja_movimientos
+        WHERE dia BETWEEN ? AND ?
+          AND tipo_mov='ingreso'
+          AND LOWER(COALESCE(motivo,'')) LIKE '%venta%'
+        GROUP BY dia
+        ORDER BY dia
+    """, (week_start_s, week_end_s))
+    rows_week = cur.fetchall()
+
+    totals_map = {r["dia"]: float(r["total"]) for r in rows_week}
+    week_days = []
+    week_labels = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
+    week_total = 0.0
+
+    for i in range(6):
+        d = (week_start + timedelta(days=i)).isoformat()
+        val = float(totals_map.get(d, 0.0))
+        week_total += val
+        week_days.append({"dia": d, "label": week_labels[i], "total": val})
+
+    # Semana anterior (para ver tendencia)
+    prev_start = week_start - timedelta(days=7)
+    prev_end = prev_start + timedelta(days=5)
+    prev_start_s = prev_start.isoformat()
+    prev_end_s = prev_end.isoformat()
 
     cur.execute("""
-        SELECT COUNT(*) AS c
-        FROM productos
-        WHERE activo=1 AND tipo='maquina'
-          AND LOWER(COALESCE(categoria,'')) LIKE '%revision%'
-    """)
-    maquinas_revision = cur.fetchone()["c"]
+        SELECT COALESCE(SUM(monto),0) AS total
+        FROM caja_movimientos
+        WHERE dia BETWEEN ? AND ?
+          AND tipo_mov='ingreso'
+          AND LOWER(COALESCE(motivo,'')) LIKE '%venta%'
+    """, (prev_start_s, prev_end_s))
+    prev_week_total = float(cur.fetchone()["total"] or 0)
 
-    maquinas_operativas = max(0, maquinas_total - maquinas_revision)
-    pct_operativas = 0
-    if maquinas_total > 0:
-        pct_operativas = round((maquinas_operativas / maquinas_total) * 100, 1)
+    if prev_week_total <= 0 and week_total > 0:
+        trend = "up"
+        trend_pct = 100.0
+    elif prev_week_total <= 0 and week_total <= 0:
+        trend = "flat"
+        trend_pct = 0.0
+    else:
+        delta = week_total - prev_week_total
+        trend_pct = round((delta / prev_week_total) * 100, 1)
+        if delta > 0:
+            trend = "up"
+        elif delta < 0:
+            trend = "down"
+        else:
+            trend = "flat"
+
+    # Top vendido INSUMO (desde movimientos)
+    cur.execute("""
+        SELECT p.id, p.sku, p.nombre, SUM(m.cantidad) AS qty
+        FROM movimientos m
+        JOIN productos p ON p.id = m.producto_id
+        WHERE p.tipo='insumo'
+          AND m.tipo_mov='egreso'
+          AND LOWER(COALESCE(m.motivo,'')) LIKE '%venta%'
+          AND date(m.fecha) BETWEEN ? AND ?
+        GROUP BY p.id
+        ORDER BY qty DESC
+        LIMIT 1
+    """, (week_start_s, week_end_s))
+    top_insumo = cur.fetchone()
+
+    # Top vendido MAQUINA (desde movimientos)
+    cur.execute("""
+        SELECT p.id, p.sku, p.nombre, SUM(m.cantidad) AS qty
+        FROM movimientos m
+        JOIN productos p ON p.id = m.producto_id
+        WHERE p.tipo='maquina'
+          AND m.tipo_mov='egreso'
+          AND LOWER(COALESCE(m.motivo,'')) LIKE '%venta%'
+          AND date(m.fecha) BETWEEN ? AND ?
+        GROUP BY p.id
+        ORDER BY qty DESC
+        LIMIT 1
+    """, (week_start_s, week_end_s))
+    top_maquina = cur.fetchone()
 
     conn.close()
 
     return render_template(
         "dashboard.html",
         username=session["username"],
-
-        # Cards
         total_productos=total_productos,
         bajo_insumos=bajo_insumos,
         bajo_maquinas=bajo_maquinas,
         saldo_caja=saldo_caja,
         caja_abierta=caja_abierta,
-
-        # Panels
+        ventas_hoy_total=ventas_hoy_total,
+        ventas_hoy_n=ventas_hoy_n,
         insumos_rows=insumos_rows,
-        maquinas_total=maquinas_total,
-        maquinas_operativas=maquinas_operativas,
-        maquinas_revision=maquinas_revision,
-        pct_operativas=pct_operativas,
-        ultimo_reporte=now_str()
+        ultimo_reporte=now_str(),
+
+        # NUEVO
+        week_start=week_start_s,
+        week_end=week_end_s,
+        week_days=week_days,
+        week_total=week_total,
+        prev_week_total=prev_week_total,
+        trend=trend,
+        trend_pct=trend_pct,
+        top_insumo=top_insumo,
+        top_maquina=top_maquina,
     )
 
-
 # --------------------
-# REPORTES (descarga simple CSV)
+# REPORTES (CSV)
 # --------------------
 @app.route("/reportes/ventas.csv")
 @login_required
 def reporte_ventas_csv():
-    """
-    Como aún no hay tabla de "ventas", este reporte toma:
-    - caja_movimientos donde tipo_mov='ingreso'
-    - y motivo contiene "venta" (puedes registrar así tus ventas por ahora)
-    """
     conn = db_conn()
     cur = conn.cursor()
-    cur.execute("""
-        SELECT fecha, dia, monto, motivo, metodo, referencia
+
+    fecha_expr = caja_fecha_expr(cur)
+
+    cur.execute(f"""
+        SELECT fecha, fecha_full, dia, monto, motivo, metodo, medio, referencia, tipo_mov
         FROM caja_movimientos
         WHERE tipo_mov='ingreso'
-          AND LOWER(COALESCE(motivo,'')) LIKE '%venta%'
-        ORDER BY datetime(fecha) DESC, id DESC
+        ORDER BY datetime({fecha_expr}) DESC, id DESC
     """)
     rows = cur.fetchall()
     conn.close()
 
     lines = ["fecha,dia,monto,motivo,metodo,referencia"]
     for r in rows:
-        fecha = (r["fecha"] or "").replace(",", " ")
+        fecha_val = r["fecha_full"] or r["fecha"] or ""
+        fecha_val = fecha_val.replace(",", " ")
         dia = (r["dia"] or "").replace(",", " ")
         monto = str(r["monto"] if r["monto"] is not None else 0)
+        # preferimos metodo; si no, medio
+        metodo = (r["metodo"] or r["medio"] or "").replace(",", " ")
         motivo = (r["motivo"] or "").replace(",", " ")
-        metodo = (r["metodo"] or "").replace(",", " ")
         referencia = (r["referencia"] or "").replace(",", " ")
-        lines.append(f"{fecha},{dia},{monto},{motivo},{metodo},{referencia}")
+        lines.append(f"{fecha_val},{dia},{monto},{motivo},{metodo},{referencia}")
 
     csv_data = "\n".join(lines)
     resp = make_response(csv_data)
@@ -360,11 +521,9 @@ def _listar_catalogo(tipo: str):
         where += " AND (sku LIKE ? OR nombre LIKE ? OR categoria LIKE ?)"
         params += [f"%{q}%", f"%{q}%", f"%{q}%"]
 
-    # total para paginación
     cur.execute(f"SELECT COUNT(*) AS c FROM productos {where}", tuple(params))
     total = cur.fetchone()["c"]
 
-    # filas
     cur.execute(f"""
         SELECT id, sku, nombre, categoria, stock_actual, stock_min, imagen_filename, activo
         FROM productos
@@ -376,7 +535,6 @@ def _listar_catalogo(tipo: str):
     conn.close()
 
     total_pages = (total + per_page - 1) // per_page
-
     titulo = "Catálogo de Máquinas" if tipo == "maquina" else "Catálogo de Insumos"
 
     return render_template(
@@ -389,7 +547,6 @@ def _listar_catalogo(tipo: str):
         total_pages=total_pages,
         total=total
     )
-
 
 
 @app.route("/catalogo/maquinas")
@@ -514,9 +671,8 @@ def catalogo_nuevo(tipo):
         flash("Producto creado ✅")
         return redirect(url_for("catalogo_maquinas" if tipo == "maquina" else "catalogo_insumos"))
 
-    cats = CATEGORIAS_MAQUINAS if tipo=="maquina" else CATEGORIAS_INSUMOS
+    cats = CATEGORIAS_MAQUINAS if tipo == "maquina" else CATEGORIAS_INSUMOS
     return render_template("catalogo_form.html", modo="nuevo", producto=None, tipo=tipo, categorias=cats, unidades=UNIDADES)
-
 
 
 # --------------------
@@ -598,9 +754,8 @@ def catalogo_editar(tipo, pid):
         flash("Producto actualizado ✅")
         return redirect(url_for("catalogo_maquinas" if tipo == "maquina" else "catalogo_insumos"))
 
-    cats = CATEGORIAS_MAQUINAS if tipo=="maquina" else CATEGORIAS_INSUMOS
+    cats = CATEGORIAS_MAQUINAS if tipo == "maquina" else CATEGORIAS_INSUMOS
     return render_template("catalogo_form.html", modo="editar", producto=producto, tipo=tipo, categorias=cats, unidades=UNIDADES)
-
 
 
 @app.route("/catalogo/<tipo>/<int:pid>/toggle", methods=["POST"])
@@ -630,14 +785,9 @@ def catalogo_toggle(tipo, pid):
 
 
 # ============================================================
-# MÓDULO CAJA (Sprint 3): FUNCIONAL
+# MÓDULO CAJA (Sprint 3): FUNCIONAL + ITEMS (VENTA)
 # ============================================================
 def ensure_caja_estado(cur, dia: str):
-    """
-    Garantiza que exista un registro en caja_estado para el día dado.
-    Además normaliza 'dia' para evitar inserts inválidos.
-    """
-    # normaliza dia a YYYY-MM-DD sí o sí
     dia = parse_date_yyyy_mm_dd(dia, today_str())
 
     cur.execute("SELECT * FROM caja_estado WHERE dia=?", (dia,))
@@ -645,7 +795,6 @@ def ensure_caja_estado(cur, dia: str):
     if row:
         return row
 
-    # Inserta con valores válidos (abierta 0/1, efectivo_inicial numérico)
     cur.execute("""
         INSERT INTO caja_estado (dia, abierta, efectivo_inicial, created_at)
         VALUES (?, 0, 0, ?)
@@ -655,25 +804,26 @@ def ensure_caja_estado(cur, dia: str):
     return cur.fetchone()
 
 
-
 def caja_totales(cur, dia: str):
+    medio_col = caja_col_medio(cur)
+
     # Totales efectivo
-    cur.execute("""
+    cur.execute(f"""
         SELECT
           COALESCE(SUM(CASE WHEN tipo_mov='ingreso' THEN monto ELSE 0 END),0) AS ing,
           COALESCE(SUM(CASE WHEN tipo_mov='egreso' THEN monto ELSE 0 END),0) AS egr
         FROM caja_movimientos
-        WHERE dia=? AND medio='efectivo'
+        WHERE dia=? AND {medio_col}='efectivo'
     """, (dia,))
     r1 = cur.fetchone()
 
     # Totales banco
-    cur.execute("""
+    cur.execute(f"""
         SELECT
           COALESCE(SUM(CASE WHEN tipo_mov='ingreso' THEN monto ELSE 0 END),0) AS ing,
           COALESCE(SUM(CASE WHEN tipo_mov='egreso' THEN monto ELSE 0 END),0) AS egr
         FROM caja_movimientos
-        WHERE dia=? AND medio='banco'
+        WHERE dia=? AND {medio_col}='banco'
     """, (dia,))
     r2 = cur.fetchone()
 
@@ -687,7 +837,6 @@ def caja_home():
     conn = db_conn()
     try:
         cur = conn.cursor()
-
         estado = ensure_caja_estado(cur, dia)
 
         efectivo_ing, efectivo_egr, banco_ing, banco_egr = caja_totales(cur, dia)
@@ -700,15 +849,17 @@ def caja_home():
         start_s = start.isoformat()
         end_s = end.isoformat()
 
-        cur.execute("""
+        fecha_expr = caja_fecha_expr(cur)
+
+        cur.execute(f"""
             SELECT * FROM caja_movimientos
-            WHERE date(fecha) BETWEEN ? AND ?
-            ORDER BY datetime(fecha) DESC, id DESC
+            WHERE date({fecha_expr}) BETWEEN ? AND ?
+            ORDER BY datetime({fecha_expr}) DESC, id DESC
             LIMIT 50
         """, (start_s, end_s))
         ultimos = cur.fetchall()
 
-        conn.commit()  # por si ensure_caja_estado insertó
+        conn.commit()
 
         return render_template(
             "caja_home.html",
@@ -726,23 +877,6 @@ def caja_home():
         )
     finally:
         conn.close()
-def table_has_column(table: str, column: str) -> bool:
-    conn = db_conn()
-    try:
-        cur = conn.cursor()
-        cur.execute(f"PRAGMA table_info({table})")
-        cols = [r[1] for r in cur.fetchall()]  # r[1] = name
-        return column in cols
-    finally:
-        conn.close()
-
-
-def caja_col_medio() -> str:
-    # Tu BD puede tener 'medio' o 'metodo'
-    if table_has_column("caja_movimientos", "medio"):
-        return "medio"
-    return "metodo"
-
 
 
 @app.route("/caja/abrir", methods=["GET", "POST"])
@@ -783,18 +917,75 @@ def caja_abrir():
         return redirect(url_for("caja_home"))
 
     conn.close()
-    return render_template("caja_mov_form.html", modo="abrir", dia=dia, estado=estado)
+    return render_template("caja_mov_form.html", modo="abrir", dia=dia, estado=estado, page_class="page-wide")
 
 
+# -------------------------
+# API: buscar productos (para autocompletar en movimientos)
+# -------------------------
+@app.route("/api/productos/buscar")
+@login_required
+def api_productos_buscar():
+    q = (request.args.get("q", "") or "").strip()
+    tipo = (request.args.get("tipo", "") or "").strip()  # opcional: insumo/maquina
+    limit = 15
+
+    conn = db_conn()
+    cur = conn.cursor()
+
+    where = "WHERE activo=1"
+    params = []
+
+    if tipo in ("insumo", "maquina"):
+        where += " AND tipo=?"
+        params.append(tipo)
+
+    if q:
+        where += " AND (sku LIKE ? OR nombre LIKE ?)"
+        params += [f"%{q}%", f"%{q}%"]
+
+    cur.execute(f"""
+        SELECT id, tipo, sku, nombre, categoria, unidad, precio, stock_actual, stock_min
+        FROM productos
+        {where}
+        ORDER BY
+          CASE WHEN stock_actual <= stock_min THEN 0 ELSE 1 END,
+          nombre
+        LIMIT ?
+    """, tuple(params + [limit]))
+    rows = cur.fetchall()
+    conn.close()
+
+    out = []
+    for r in rows:
+        out.append({
+            "id": r["id"],
+            "tipo": r["tipo"],
+            "sku": r["sku"] or "",
+            "nombre": r["nombre"] or "",
+            "categoria": r["categoria"] or "",
+            "unidad": r["unidad"] or "",
+            "precio": float(r["precio"] or 0),
+            "stock_actual": int(r["stock_actual"] or 0),
+            "stock_min": int(r["stock_min"] or 0),
+        })
+    return jsonify(out)
+
+
+# -------------------------
+# NUEVO MOVIMIENTO (Caja + Venta por items)
+# -------------------------
 @app.route("/caja/movimiento/nuevo", methods=["GET", "POST"])
 @login_required
 def caja_mov_nuevo():
     dia_default = today_str()
 
     if request.method == "POST":
-        # --------- leer + normalizar inputs ---------
+        # ---------- inputs base ----------
         tipo_mov = (request.form.get("tipo_mov", "ingreso") or "ingreso").strip().lower()
-        metodo = (request.form.get("metodo", "efectivo") or "efectivo").strip().lower()
+
+        # acepta metodo (nuevo) o medio (viejo)
+        metodo = (request.form.get("metodo") or request.form.get("medio") or "efectivo").strip().lower()
 
         monto_raw = (request.form.get("monto", "0") or "0").strip()
         motivo = (request.form.get("motivo", "") or "").strip()
@@ -803,67 +994,148 @@ def caja_mov_nuevo():
         fecha_dia = (request.form.get("dia", dia_default) or dia_default).strip()
         fecha_dia = parse_date_yyyy_mm_dd(fecha_dia, dia_default)
 
-        fecha_full = (request.form.get("fecha_full", "") or "").strip()
-        if not fecha_full:
-            fecha_full = now_str()
-        else:
-            # si solo viene YYYY-MM-DD -> agrega hora
-            if len(fecha_full) == 10:
-                fecha_full = fecha_full + " 00:00:00"
+        fecha_full_in = (request.form.get("fecha_full", "") or "").strip()
+        fecha_full = parse_datetime_input(fecha_full_in, now_str())
 
         enviado_matriz = 1 if request.form.get("enviado_matriz") == "1" else 0
+        destino_otro = (request.form.get("destino_otro", "") or "").strip()
 
-        # --------- validar tipo_mov / metodo ---------
+        # ---------- normaliza ----------
         if tipo_mov not in ("ingreso", "egreso"):
             tipo_mov = "ingreso"
-
         if metodo not in ("efectivo", "banco"):
             metodo = "efectivo"
 
-        # --------- validar monto ---------
-        try:
-            monto = float(monto_raw.replace(",", "."))  # por si escriben 10,50
-            if monto <= 0:
-                raise ValueError()
-        except ValueError:
-            flash("Monto inválido (debe ser mayor a 0).")
-            return redirect(url_for("caja_mov_nuevo"))
-
-        # Si es banco, referencia obligatoria
+        # Si banco, referencia obligatoria
         if metodo == "banco" and not referencia:
             flash("En pagos por banco, ingrese el número de comprobante (referencia).")
             return redirect(url_for("caja_mov_nuevo"))
 
-        # --------- DB con manejo seguro ---------
+        # ---------- leer items (venta) ----------
+        # Soportamos varios nombres por si tu HTML cambia:
+        prod_ids = request.form.getlist("producto_id[]") or request.form.getlist("producto_id")
+        qtys = request.form.getlist("cantidad_item[]") or request.form.getlist("cantidad_item") or request.form.getlist("cantidad[]")
+
+        items = []
+        if prod_ids and qtys and len(prod_ids) == len(qtys):
+            for pid_raw, q_raw in zip(prod_ids, qtys):
+                pid_raw = (pid_raw or "").strip()
+                q_raw = (q_raw or "").strip()
+                if not pid_raw or not q_raw:
+                    continue
+                try:
+                    pid = int(pid_raw)
+                    # cantidad puede ser int o decimal (por eso float)
+                    qty = float(q_raw.replace(",", "."))
+                    if qty <= 0:
+                        continue
+                    items.append((pid, qty))
+                except Exception:
+                    continue
+
+        # ---------- validar monto ----------
+        # Si hay items y el usuario no puso monto, permitimos 0 (para que luego lo sumes manual).
+        # Pero SI tú quieres obligatorio, ponlo required en HTML.
+        try:
+            monto = float(monto_raw.replace(",", ".")) if monto_raw else 0.0
+            if monto < 0:
+                raise ValueError()
+        except ValueError:
+            flash("Monto inválido.")
+            return redirect(url_for("caja_mov_nuevo"))
+
+        # Regla: Si tipo_mov = ingreso y hay items, interpretamos como "VENTA":
+        # - Caja: ingreso (suma si efectivo, o registra banco)
+        # - Inventario: egreso (descuenta stock)
+        is_venta = (tipo_mov == "ingreso" and len(items) > 0)
+
         conn = db_conn()
         try:
             cur = conn.cursor()
+            cur.execute("BEGIN;")
 
-            # asegura estado del día (y evita dia vacío)
             ensure_caja_estado(cur, fecha_dia)
 
-            cur.execute("""
-                INSERT INTO caja_movimientos
-                (fecha, dia, monto, motivo, referencia, tipo_mov, medio, enviado_matriz)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (fecha_full, fecha_dia, monto, motivo, referencia, tipo_mov, metodo, enviado_matriz))
+            # 1) Insertar movimiento caja
+            mov_id = insert_caja_movimiento(cur, {
+                "fecha": fecha_full,         # compat
+                "fecha_full": fecha_full,    # nuevo
+                "dia": fecha_dia,
+                "monto": monto,
+                "motivo": motivo,
+                "referencia": referencia,
+                "tipo_mov": tipo_mov,
+                "metodo": metodo,
+                "enviado_matriz": enviado_matriz,
+                "destino_otro": destino_otro if tipo_mov == "egreso" else None,
+            })
 
+            # 2) Si es venta: guardar items + descontar stock + registrar movimientos de inventario
+            if is_venta:
+                # Validar tabla items existe
+                if not table_exists(cur, "caja_mov_items"):
+                    raise RuntimeError("No existe la tabla caja_mov_items. Ejecuta primero: python db.py")
 
- 
+                # Validar productos + stock suficiente
+                # (bloqueo lógico: SQLite no tiene FOR UPDATE real, pero en transacción funciona bien)
+                for pid, qty in items:
+                    cur.execute("""
+                        SELECT id, sku, nombre, stock_actual, activo
+                        FROM productos
+                        WHERE id=? AND activo=1
+                    """, (pid,))
+                    p = cur.fetchone()
+                    if not p:
+                        raise ValueError(f"Producto inválido o inactivo (id={pid}).")
+
+                    stock = float(p["stock_actual"] or 0)
+                    if qty > stock:
+                        raise ValueError(f"Stock insuficiente para {p['nombre']} ({p['sku']}). Disponible: {stock}, solicitado: {qty}")
+
+                # Aplicar
+                for pid, qty in items:
+                    cur.execute("SELECT sku, nombre FROM productos WHERE id=?", (pid,))
+                    p = cur.fetchone()
+
+                    # items por movimiento
+                    cur.execute("""
+                        INSERT INTO caja_mov_items (movimiento_id, producto_id, sku, nombre, cantidad)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (mov_id, pid, p["sku"], p["nombre"], qty))
+
+                    # descontar stock
+                    cur.execute("""
+                        UPDATE productos
+                        SET stock_actual = stock_actual - ?
+                        WHERE id=? AND activo=1
+                    """, (qty, pid))
+
+                    # registrar movimiento inventario (egreso)
+                    mov_motivo = motivo if motivo else f"Venta (caja_mov_id={mov_id})"
+                    cur.execute("""
+                        INSERT INTO movimientos (producto_id, tipo_mov, cantidad, motivo, fecha)
+                        VALUES (?, 'egreso', ?, ?, ?)
+                    """, (pid, int(qty) if qty.is_integer() else int(round(qty)), mov_motivo, fecha_full))
+
+            # 3) Si es egreso: (solo caja) ya quedó registrado.
+            #    Si quieres que "enviado_matriz" obligue efectivo, eso se valida en front,
+            #    pero aquí lo dejamos libre.
 
             conn.commit()
-            flash("Movimiento registrado ✅")
+            if is_venta:
+                flash("✅ Venta registrada: caja + descuento de stock.")
+            else:
+                flash("Movimiento registrado ✅")
             return redirect(url_for("caja_home"))
 
-        except sqlite3.IntegrityError as e:
+        except (sqlite3.IntegrityError, sqlite3.OperationalError) as e:
             conn.rollback()
-            # Esto captura el CHECK/UNIQUE/FK y te muestra mensaje útil
-            flash(f"Error de integridad al guardar el movimiento: {e}")
+            flash(f"Error de base de datos: {e}")
             return redirect(url_for("caja_mov_nuevo"))
 
-        except sqlite3.OperationalError as e:
+        except ValueError as e:
             conn.rollback()
-            flash(f"Error operativo de base de datos: {e}")
+            flash(str(e))
             return redirect(url_for("caja_mov_nuevo"))
 
         except Exception as e:
@@ -875,10 +1147,17 @@ def caja_mov_nuevo():
             conn.close()
 
     # GET
-    return render_template("caja_mov_form.html", modo="mov", dia=dia_default, estado=None)
+    return render_template("caja_mov_form.html", modo="mov", dia=dia_default, estado=None, page_class="page-wide")
 
+@app.route("/venta/nueva")
+@login_required
+def venta_nueva():
+    # Abre el formulario de movimiento ya en modo "venta"
+    return redirect(url_for("caja_mov_nuevo", preset="venta"))
 
-
+# -------------------------
+# HISTORIAL (por rango) + soporte para calendario (API)
+# -------------------------
 @app.route("/caja/movimientos")
 @login_required
 def caja_movimientos_list():
@@ -898,18 +1177,22 @@ def caja_movimientos_list():
     conn = db_conn()
     cur = conn.cursor()
 
+    medio_col = caja_col_medio(cur)
+    fecha_expr = caja_fecha_expr(cur)
+
     params = [start, end]
     where_extra = ""
 
     if metodo in ("efectivo", "banco"):
-        where_extra = " AND metodo=? "
+        where_extra = f" AND {medio_col}=? "
         params.append(metodo)
 
     cur.execute(f"""
-        SELECT * FROM caja_movimientos
-        WHERE date(fecha) BETWEEN ? AND ?
+        SELECT *
+        FROM caja_movimientos
+        WHERE date({fecha_expr}) BETWEEN ? AND ?
         {where_extra}
-        ORDER BY datetime(fecha) DESC, id DESC
+        ORDER BY datetime({fecha_expr}) DESC, id DESC
     """, tuple(params))
     rows = cur.fetchall()
 
@@ -918,7 +1201,7 @@ def caja_movimientos_list():
           COALESCE(SUM(CASE WHEN tipo_mov='ingreso' THEN monto ELSE 0 END),0) AS ing,
           COALESCE(SUM(CASE WHEN tipo_mov='egreso' THEN monto ELSE 0 END),0) AS egr
         FROM caja_movimientos
-        WHERE date(fecha) BETWEEN ? AND ?
+        WHERE date({fecha_expr}) BETWEEN ? AND ?
         {where_extra}
     """, tuple(params))
     t = cur.fetchone()
@@ -936,12 +1219,56 @@ def caja_movimientos_list():
     )
 
 
+@app.route("/api/caja/movimientos")
+@login_required
+def api_caja_movimientos_por_dia():
+    """
+    Para calendario:
+      /api/caja/movimientos?dia=YYYY-MM-DD
+    Retorna lista de movimientos del día.
+    """
+    dia = (request.args.get("dia", "") or "").strip()
+    dia = parse_date_yyyy_mm_dd(dia, today_str())
+
+    conn = db_conn()
+    cur = conn.cursor()
+
+    fecha_expr = caja_fecha_expr(cur)
+
+    cur.execute(f"""
+        SELECT id, dia, monto, motivo, referencia, tipo_mov,
+               COALESCE(metodo, medio) AS metodo,
+               enviado_matriz, destino_otro,
+               COALESCE(fecha_full, fecha) AS fecha
+        FROM caja_movimientos
+        WHERE dia=?
+        ORDER BY datetime({fecha_expr}) DESC, id DESC
+    """, (dia,))
+    rows = cur.fetchall()
+    conn.close()
+
+    out = []
+    for r in rows:
+        out.append({
+            "id": r["id"],
+            "dia": r["dia"] or "",
+            "fecha": r["fecha"] or "",
+            "tipo_mov": r["tipo_mov"] or "",
+            "metodo": r["metodo"] or "",
+            "monto": float(r["monto"] or 0),
+            "motivo": r["motivo"] or "",
+            "referencia": r["referencia"] or "",
+            "enviado_matriz": int(r["enviado_matriz"] or 0),
+            "destino_otro": r["destino_otro"] or "",
+        })
+    return jsonify(out)
+
+
 @app.route("/caja/movimiento/<int:mid>/enviar-matriz", methods=["POST"])
 @login_required
 def caja_marcar_enviado_matriz(mid):
     conn = db_conn()
     cur = conn.cursor()
-
     cur.execute("UPDATE caja_movimientos SET enviado_matriz=1 WHERE id=?", (mid,))
     conn.commit()
     conn.close()
@@ -999,27 +1326,22 @@ def caja_cerrar():
         efectivo_final=efectivo_final
     )
 
+
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
-    # Si ya hay sesión, igual puede recuperar contraseña, pero normalmente lo mandamos al dashboard
     if "username" in session:
         return redirect(url_for("dashboard"))
 
     if request.method == "POST":
         correo = request.form.get("email", "").strip()
-
         if not correo:
             flash("Ingrese su correo para recuperar la contraseña.")
             return redirect(url_for("forgot_password"))
 
-        # Demo: NO enviamos correo real en este prototipo
         flash("✅ Solicitud enviada. MIKEN se contactará desde miken.heladeria@gmail.com.")
         return redirect(url_for("login"))
 
     return render_template("forgot_password.html", hide_nav=True, page_class="page-login", title="MIKEN - Recuperar contraseña")
-
-
-
 
 
 # --------------------
@@ -1027,4 +1349,3 @@ def forgot_password():
 # --------------------
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
-
