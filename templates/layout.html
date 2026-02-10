@@ -5,11 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>{{ title if title else "MIKEN - Sistema" }}</title>
 
-  <!-- ✅ CSS con cache-buster para que el navegador no use el viejo -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 
-<body class="{{ page_class if page_class else '' }}">
+<body class="app-layout {{ page_class if page_class else '' }}">
 
   {% if not hide_nav %}
   <header class="topbar">
@@ -29,44 +28,42 @@
         <a class="nav__btn nav__btn--danger" href="{{ url_for('logout') }}">Salir</a>
       </nav>
 
-    <div class="userbox">
-      <button class="userbox__btn" type="button" onclick="toggleUserMenu(event)">
-        <span class="userbox__avatar">👤</span>
-        <span class="userbox__name">Admin</span>
-        <span class="userbox__caret">▾</span>
-      </button>
+      <div class="userbox">
+        <button class="userbox__btn" type="button" onclick="toggleUserMenu(event)">
+          <span class="userbox__avatar">👤</span>
+          <span class="userbox__name">Admin</span>
+          <span class="userbox__caret">▾</span>
+        </button>
 
-
-      <div class="userbox__menu" id="userMenu">
-        <a href="{{ url_for('forgot_password') }}">🔑 Cambiar contraseña</a>
-        <a href="{{ url_for('logout') }}" class="userbox__menu--danger">
-          🚪 Cerrar sesión
-        </a>
+        <div class="userbox__menu" id="userMenu">
+          <a href="{{ url_for('forgot_password') }}">🔑 Cambiar contraseña</a>
+          <a href="{{ url_for('logout') }}" class="userbox__menu--danger">
+            🚪 Cerrar sesión
+          </a>
+        </div>
       </div>
-    </div>
-
 
     </div>
   </header>
   {% endif %}
 
- <main class="container-fluid">
-  {% with messages = get_flashed_messages() %}
-    {% if messages %}
-    <div class="flashwrap">
-      {% for message in messages %}
-        <div class="flash">{{ message }}</div>
-      {% endfor %}
-    </div>
-    {% endif %}
-  {% endwith %}
+  <!-- ✅ MAIN: ahora es flex:1 y empuja el footer abajo -->
+  <main class="app-main container-fluid">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+      <div class="flashwrap">
+        {% for message in messages %}
+          <div class="flash">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    {% endwith %}
 
-  {% block content %}{% endblock %}
-</main>
+    {% block content %}{% endblock %}
+  </main>
 
-
-
-  <footer class="footer">
+  <!-- ✅ FOOTER: se queda abajo -->
+  <footer class="footer app-footer">
     <div class="footer__inner">
       <div>© 2026 MIKEN. Todos los derechos reservados.</div>
       <div>Quito – Av. Ilaló – Quimbitas Plaza</div>
@@ -74,30 +71,17 @@
   </footer>
 
   <script>
-    function toggleUserMenu(){
-      const m = document.getElementById("usermenu");
-      if(m) m.classList.toggle("open");
+    function toggleUserMenu(event) {
+      event.stopPropagation();
+      const menu = document.getElementById("userMenu");
+      if (menu) menu.classList.toggle("open");
     }
-    document.addEventListener("click", (e)=>{
-      const m = document.getElementById("usermenu");
-      if(!m) return;
-      if(!e.target.closest(".userbox")) m.classList.remove("open");
+
+    document.addEventListener("click", function () {
+      const menu = document.getElementById("userMenu");
+      if (menu) menu.classList.remove("open");
     });
   </script>
 
-  <script>
-  function toggleUserMenu(event) {
-    event.stopPropagation();
-    document.getElementById("userMenu").classList.toggle("open");
-  }
-
-  document.addEventListener("click", function () {
-    const menu = document.getElementById("userMenu");
-    if (menu) menu.classList.remove("open");
-  });
-  </script>
-
-
 </body>
 </html>
-

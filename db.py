@@ -26,12 +26,18 @@ def add_column_if_missing(cur, table: str, column: str, ddl: str):
 
 
 def ensure_indexes(cur):
+    # Inventario
     cur.execute("CREATE INDEX IF NOT EXISTS idx_movimientos_producto_id ON movimientos(producto_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_movimientos_fecha ON movimientos(fecha)")
 
+    # Caja
     cur.execute("CREATE INDEX IF NOT EXISTS idx_caja_mov_dia ON caja_movimientos(dia)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_caja_mov_fecha ON caja_movimientos(fecha)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_caja_estado_dia ON caja_estado(dia)")
+
+    # Items por movimiento (venta)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_caja_items_mov_id ON caja_mov_items(movimiento_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_caja_items_prod_id ON caja_mov_items(producto_id)")
 
 
 def backfill_timestamps(cur):
@@ -62,6 +68,7 @@ def normalize_caja_movimientos(cur):
       - enviado_matriz debe ser 0 o 1
     Además, soporta compatibilidad: si existe 'medio'/'tipo', los alinea con 'metodo'/'tipo_mov'.
     """
+
     # Asegura valores válidos donde existan columnas
     if column_exists(cur, "caja_movimientos", "tipo_mov"):
         cur.execute("""
@@ -88,7 +95,6 @@ def normalize_caja_movimientos(cur):
     has_medio = column_exists(cur, "caja_movimientos", "medio")
     has_metodo = column_exists(cur, "caja_movimientos", "metodo")
     if has_medio and has_metodo:
-        # Si metodo vacío, toma medio; si medio vacío, toma metodo
         cur.execute("""
             UPDATE caja_movimientos
             SET metodo = COALESCE(NULLIF(TRIM(metodo), ''), medio)
@@ -176,7 +182,7 @@ def migrate():
         add_column_if_missing(cur, "productos", "created_at", "created_at TEXT")
 
         # -------------------------
-        # MOVIMIENTOS INVENTARIO
+        # MOVIMIENTOS INVENTARIO (manuales)
         # -------------------------
         cur.execute("""
         CREATE TABLE IF NOT EXISTS movimientos (
@@ -257,7 +263,8 @@ def migrate():
         cur.execute("""
         CREATE TABLE IF NOT EXISTS caja_movimientos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha TEXT NOT NULL DEFAULT (datetime('now')),
+            fecha TEXT NOT NULL DEFAULT (datetime('now')), -- compat
+            fecha_full TEXT,                               -- nuevo: datetime seleccionado por usuario
             dia TEXT,
             monto REAL NOT NULL DEFAULT 0,
             motivo TEXT,
@@ -265,6 +272,7 @@ def migrate():
             tipo_mov TEXT NOT NULL DEFAULT 'ingreso' CHECK (tipo_mov IN ('ingreso','egreso')),
             metodo TEXT NOT NULL DEFAULT 'efectivo' CHECK (metodo IN ('efectivo','banco')),
             enviado_matriz INTEGER NOT NULL DEFAULT 0 CHECK (enviado_matriz IN (0,1)),
+            destino_otro TEXT,                             -- nuevo: para egresos "otro"
             -- Campos opcionales para banco (si luego los usas)
             comprobante TEXT,
             banco_nombre TEXT,
@@ -276,6 +284,7 @@ def migrate():
 
         # Columnas principales
         add_column_if_missing(cur, "caja_movimientos", "fecha", "fecha TEXT")
+        add_column_if_missing(cur, "caja_movimientos", "fecha_full", "fecha_full TEXT")
         add_column_if_missing(cur, "caja_movimientos", "dia", "dia TEXT")
         add_column_if_missing(cur, "caja_movimientos", "monto", "monto REAL NOT NULL DEFAULT 0")
         add_column_if_missing(cur, "caja_movimientos", "motivo", "motivo TEXT")
@@ -283,6 +292,7 @@ def migrate():
         add_column_if_missing(cur, "caja_movimientos", "tipo_mov", "tipo_mov TEXT")
         add_column_if_missing(cur, "caja_movimientos", "metodo", "metodo TEXT")
         add_column_if_missing(cur, "caja_movimientos", "enviado_matriz", "enviado_matriz INTEGER NOT NULL DEFAULT 0")
+        add_column_if_missing(cur, "caja_movimientos", "destino_otro", "destino_otro TEXT")
 
         # Para banco (si tu HTML/app los pide)
         add_column_if_missing(cur, "caja_movimientos", "comprobante", "comprobante TEXT")
@@ -291,6 +301,22 @@ def migrate():
         # Compatibilidad con código viejo que use "medio" o "tipo"
         add_column_if_missing(cur, "caja_movimientos", "medio", "medio TEXT")
         add_column_if_missing(cur, "caja_movimientos", "tipo", "tipo TEXT")
+
+        # -------------------------
+        # CAJA - ITEMS POR MOVIMIENTO (venta / descuento stock)
+        # -------------------------
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS caja_mov_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            movimiento_id INTEGER NOT NULL,
+            producto_id INTEGER NOT NULL,
+            sku TEXT,
+            nombre TEXT,
+            cantidad REAL NOT NULL CHECK (cantidad > 0),
+            FOREIGN KEY (movimiento_id) REFERENCES caja_movimientos(id) ON DELETE CASCADE,
+            FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE RESTRICT
+        )
+        """)
 
         # Backfill fechas vacías
         backfill_timestamps(cur)
@@ -302,7 +328,7 @@ def migrate():
         ensure_indexes(cur)
 
         cur.execute("COMMIT;")
-        print("✅ Migración completa (productos, movimientos, caja) con normalización y compatibilidad.")
+        print("✅ Migración completa (productos, movimientos, caja) + items por movimiento.")
 
     except Exception:
         cur.execute("ROLLBACK;")
@@ -313,3 +339,4 @@ def migrate():
 
 if __name__ == "__main__":
     migrate()
+
